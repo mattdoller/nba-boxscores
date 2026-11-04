@@ -95,7 +95,8 @@ To serve only what's cached from the real cache too, start the server with
 - **`server.js`** is an Express app serving `public/` and a small JSON API
   (`/api/teams`, `/api/games`, `/api/boxscore`, `/api/playbyplay`,
   `/api/shotchart`, `/api/shotzones`, `/api/player`, `/api/playerzones`,
-  `/api/league`, `/api/info`).
+  `/api/league`, `/api/info`). A player card gets the league totals for its
+  whole career from `/api/league` in one request.
 - **`nba-api/`** is a JavaScript port of the parts of nba_api this app uses:
   the stats.nba.com endpoints, their parameters, and the headers the site
   expects. Responses are cached in SQLite by request URL (`nba-api/cache.js`):

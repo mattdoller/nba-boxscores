@@ -797,20 +797,136 @@ const PARQUET_FLOOR = (() => {
     <path class="floorboards parquet-squares" d="${squares.join(" ")}" />`;
 })();
 
-// Every floor is wood but the Celtics' parquet in Boston. Games without a
-// venue go by the home team.
-function floorGrain(game) {
-  if (game.venue) {
-    if (/\b(TD|Boston) Garden\b/i.test(game.venue.name)) {
-      return PARQUET_FLOOR;
+// The Magic's floor from 2025-26 on: squares of four boards, turned a
+// quarter turn from their neighbors', set apart by narrow strips of short
+// boards laid across them. A little over 6 ft from one strip to the next.
+const MAGIC_COLUMNS = 15;
+const MAGIC_ROWS = 8;
+const MAGIC_BOARDS = 4;
+const MAGIC_STRIP = 9;
+
+const MAGIC_FLOOR = (() => {
+  const w = 940 / MAGIC_COLUMNS;
+  const h = 500 / MAGIC_ROWS;
+  const half = MAGIC_STRIP / 2;
+  const strips = [];
+  const boards = [];
+  // Each strip's two edges, centered on the lines between squares. Those at
+  // the sidelines and baselines are half strips.
+  for (let c = 0; c <= MAGIC_COLUMNS; c++) {
+    for (const x of [c * w - half, c * w + half]) {
+      if (x > 0 && x < 940) {
+        strips.push(floorSegment(x, 0, x, 500));
+      }
     }
-    return WOOD_FLOOR;
   }
-  if (game.home.abbreviation === "BOS") {
-    return PARQUET_FLOOR;
+  for (let r = 0; r <= MAGIC_ROWS; r++) {
+    for (const y of [r * h - half, r * h + half]) {
+      if (y > 0 && y < 500) {
+        strips.push(floorSegment(0, y, 940, y));
+      }
+    }
   }
-  return WOOD_FLOOR;
+  for (let c = 0; c < MAGIC_COLUMNS; c++) {
+    for (let r = 0; r < MAGIC_ROWS; r++) {
+      const left = c * w + half;
+      const top = r * h + half;
+      const right = (c + 1) * w - half;
+      const bottom = (r + 1) * h - half;
+      for (let b = 1; b < MAGIC_BOARDS; b++) {
+        const x = left + (b * (right - left)) / MAGIC_BOARDS;
+        const y = top + (b * (bottom - top)) / MAGIC_BOARDS;
+        if ((c + r) % 2 === 0) {
+          boards.push(floorSegment(left, y, right, y));
+        } else {
+          boards.push(floorSegment(x, top, x, bottom));
+        }
+        // The short boards in the strips beside the square, on its left and
+        // above it, lined up with its boards.
+        if (c > 0) {
+          boards.push(floorSegment(left - MAGIC_STRIP, y, left, y));
+        }
+        if (r > 0) {
+          boards.push(floorSegment(x, top - MAGIC_STRIP, x, top));
+        }
+      }
+    }
+  }
+  return `
+    <path class="floorboards" d="${boards.join(" ")}" />
+    <path class="floorboards parquet-squares" d="${strips.join(" ")}" />`;
+})();
+
+// The Nets' herringbone: boards laid on a slant, turning at every board's
+// length, so their edges zigzag across the floor and the turns line up in
+// points that all face the same way. Each turn runs 1.4 ft along the court
+// and 0.9 ft across it, and the zigzags are 2.8 ft apart: bigger than real
+// boards, so they don't blur together at chart size.
+const HERRINGBONE_SPACING = 28;
+const HERRINGBONE_RUN = 14;
+const HERRINGBONE_TURN = 9;
+
+// The part of a line on the floor that's inside the court, if any.
+function courtSegment(x1, y1, x2, y2) {
+  let from = 0;
+  let to = 1;
+  for (const [start, delta, min, max] of [[x1, x2 - x1, 0, 940], [y1, y2 - y1, 0, 500]]) {
+    if (delta === 0) {
+      if (start < min || start > max) {
+        return "";
+      }
+      continue;
+    }
+    const a = (min - start) / delta;
+    const b = (max - start) / delta;
+    from = Math.max(from, Math.min(a, b));
+    to = Math.min(to, Math.max(a, b));
+  }
+  if (to <= from) {
+    return "";
+  }
+  return floorSegment(x1 + from * (x2 - x1), y1 + from * (y2 - y1), x1 + to * (x2 - x1), y1 + to * (y2 - y1));
 }
+
+const HERRINGBONE_FLOOR = (() => {
+  const d = [];
+  for (let x = -HERRINGBONE_RUN; x < 940; x += HERRINGBONE_SPACING) {
+    for (let y = 0, step = 0; y < 500; y += HERRINGBONE_TURN, step++) {
+      // Out and back: each edge points the same way at every turn.
+      let dx = HERRINGBONE_RUN;
+      if (step % 2 === 1) {
+        dx = -HERRINGBONE_RUN;
+      }
+      const from = x + (step % 2) * HERRINGBONE_RUN;
+      const segment = courtSegment(from, y, from + dx, y + HERRINGBONE_TURN);
+      if (segment) {
+        d.push(segment);
+      }
+    }
+  }
+  return `<path class="floorboards" d="${d.join(" ")}" />`;
+})();
+
+// Floors that aren't plain wood, by arena: the Celtics' parquet in Boston,
+// the Nets' herringbone in Brooklyn since 2015-16, and the Magic's squares
+// in Orlando since 2025-26. Games without a venue go by the home team.
+const HOME_FLOORS = [
+  { team: "BOS", arena: /\b(TD|Boston) Garden\b/i, floor: PARQUET_FLOOR },
+  { team: "BKN", arena: /\bBarclays Center\b/i, since: "2015-07-01", floor: HERRINGBONE_FLOOR },
+  { team: "ORL", arena: /\b(Kia|Amway) Center\b/i, since: "2025-07-01", floor: MAGIC_FLOOR },
+];
+
+function floorGrain(game) {
+  const home = HOME_FLOORS.find(({ team, arena, since = "" }) => {
+    let here = game.home.abbreviation === team;
+    if (game.venue) {
+      here = arena.test(game.venue.name);
+    }
+    return here && game.date >= since;
+  });
+  return home?.floor ?? WOOD_FLOOR;
+}
+
 
 // Fits the floor and both backboards, with a little room for flights above.
 const COURT_VIEWBOX = (() => {
@@ -1910,17 +2026,24 @@ async function loadPlayerZones(season) {
 // one at a time so a long career doesn't fire a burst of requests, shading
 // each season as its totals arrive. Seasons that can't be loaded stay plain.
 async function loadLeagueSeasons(card) {
-  for (const season of zoneSeasons().reverse()) {
-    try {
-      card.league.set(season, await getJson(`/api/league?season=${season}`));
-    } catch {
-      card.league.set(season, null);
-    }
-    if (card !== playerCard) {
-      return;
-    }
-    renderPlayerCard();
+  const seasons = zoneSeasons().reverse();
+  if (seasons.length === 0) {
+    return;
   }
+
+  let totals = {};
+  try {
+    totals = await getJson(`/api/league?seasons=${seasons.join(",")}`);
+  } catch {
+    // Left unshaded, like any season without league totals.
+  }
+  if (card !== playerCard) {
+    return;
+  }
+  for (const season of seasons) {
+    card.league.set(season, totals[season] ?? null);
+  }
+  renderPlayerCard();
 }
 
 async function openPlayerCard(event) {

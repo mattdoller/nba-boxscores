@@ -705,8 +705,9 @@ describe("API", () => {
   });
 
   describe("GET /api/league", () => {
-    it("rejects a season before team stats start", async () => {
-      assert.equal((await get("/api/league?season=1990")).status, 400);
+    it("rejects a season before team stats start, or none", async () => {
+      assert.equal((await get("/api/league?seasons=2022,1990")).status, 400);
+      assert.equal((await get("/api/league")).status, 400);
     });
 
     it("adds up the teams' totals, counting minutes per player", async (t) => {
@@ -715,17 +716,49 @@ describe("API", () => {
         leaguedashteamstats: resultSets({ LeagueDashTeamStats: [team(1, 3940, 9000, 3300, 7000), team(2, 3950, 9500, 3500, 7100)] }),
       });
 
-      const { status, body } = await get("/api/league?season=2022");
+      const { status, body } = await get("/api/league?seasons=2022");
 
       assert.equal(status, 200);
       assert.equal(calls[0].params.Season, "2022-23");
       assert.equal(calls[0].params.PerMode, "Totals");
-      assert.equal(body.teams, 2);
-      assert.equal(body.min, (3940 + 3950) * 5);
-      assert.equal(body.pts, 18500);
-      assert.equal(body.fga, 14100);
-      assert.equal(body.reb, 20);
-      assert.equal(body.ast, 0);
+      const totals = body[2022];
+      assert.equal(totals.teams, 2);
+      assert.equal(totals.min, (3940 + 3950) * 5);
+      assert.equal(totals.pts, 18500);
+      assert.equal(totals.fga, 14100);
+      assert.equal(totals.reb, 20);
+      assert.equal(totals.ast, 0);
+    });
+
+    it("answers for several seasons at once, one request each", async (t) => {
+      const calls = stubStatsApi(t, {
+        leaguedashteamstats: resultSets({ LeagueDashTeamStats: [{ TEAM_ID: 1, MIN: 3940, PTS: 9000 }] }),
+      });
+
+      const { status, body } = await get("/api/league?seasons=2018,2019,2018");
+
+      assert.equal(status, 200);
+      assert.deepEqual(Object.keys(body), ["2018", "2019"]);
+      assert.deepEqual(calls.map((call) => call.params.Season), ["2018-19", "2019-20"]);
+      assert.equal(body[2019].pts, 9000);
+    });
+
+    it("gives null for a season that can't be loaded", async (t) => {
+      t.mock.method(console, "error", () => {});
+      stubStatsApi(t, {
+        leaguedashteamstats: (params) => {
+          if (params.get("Season") === "2016-17") {
+            return new Response("Server error", { status: 500 });
+          }
+          return resultSets({ LeagueDashTeamStats: [{ TEAM_ID: 1, PTS: 9000 }] });
+        },
+      });
+
+      const { status, body } = await get("/api/league?seasons=2016,2017");
+
+      assert.equal(status, 200);
+      assert.equal(body[2016], null);
+      assert.equal(body[2017].pts, 9000);
     });
   });
 

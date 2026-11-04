@@ -643,6 +643,14 @@ const HOME_CITIES = {
   UTA: "Salt Lake City",
 };
 
+// Real arena names for the teams whose floors the app draws differently, so
+// those floors show in the fake games too.
+const REAL_ARENAS = {
+  BOS: "TD Garden",
+  BKN: "Barclays Center",
+  ORL: "Kia Center",
+};
+
 // Careers for the fake players: playercareerstats, and a shot chart for
 // each season, as stats.nba.com sends them.
 
@@ -983,12 +991,10 @@ export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
       status = periods === 5 ? "Final/OT" : `Final/${periods - 4}OT`;
     }
     const attendance = tools.int(15_000, 21_000);
-    // Venues are made up too, except Boston's, so its parquet floor shows.
+    // Venues are made up too, except those with their own floors, so the
+    // floors show.
     const city = HOME_CITIES[g.home.abbreviation] ?? g.home.city;
-    let arenaName = `${city} Arena`;
-    if (g.home.abbreviation === "BOS") {
-      arenaName = "TD Garden";
-    }
+    const arenaName = REAL_ARENAS[g.home.abbreviation] ?? `${city} Arena`;
     const summary = {
       boxScoreSummary: {
         gameId: g.id,

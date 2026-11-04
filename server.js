@@ -658,14 +658,29 @@ async function leagueTotals(season) {
   };
 }
 
-// The league's totals for a regular season, to compare players' stats with.
+// The league's totals for some regular seasons, to compare players' stats
+// with: `seasons` is a comma-separated list, and the response has each
+// season's totals by year. A player card asks for its whole career at once.
+// Seasons not cached yet are fetched one at a time, to go easy on
+// stats.nba.com, and one that can't be loaded is null rather than failing
+// the rest.
 app.get("/api/league", async (req, res) => {
-  const season = Number(req.query.season);
-  if (!/^\d{4}$/.test(req.query.season ?? "") || season < FIRST_SHOT_SEASON || season > currentSeason()) {
-    return res.status(400).json({ error: `season must be a year from ${FIRST_SHOT_SEASON} (when team stats start) to ${currentSeason()}.` });
+  const years = (req.query.seasons ?? "").split(",");
+  const valid = (year) => /^\d{4}$/.test(year) && Number(year) >= FIRST_SHOT_SEASON && Number(year) <= currentSeason();
+  if (!years.every(valid)) {
+    return res.status(400).json({ error: `seasons must be years from ${FIRST_SHOT_SEASON} (when team stats start) to ${currentSeason()}, separated by commas.` });
   }
 
-  res.json(await leagueTotals(season));
+  const totals = {};
+  for (const season of new Set(years.map(Number))) {
+    try {
+      totals[season] = await leagueTotals(season);
+    } catch (err) {
+      console.error(`League totals for ${season}: ${err.message}`);
+      totals[season] = null;
+    }
+  }
+  res.json(totals);
 });
 
 // Caches everything a player's card asks for: their career, and for each
