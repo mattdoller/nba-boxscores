@@ -41,7 +41,8 @@ export default [
     languageOptions: { globals: globals.node },
   },
   // The front end runs in the browser. events.js is a classic script that
-  // defines track() for app.js, which also uses flatpickr from its CDN script.
+  // defines track() for app.js and ui/, which also use flatpickr from its CDN
+  // script.
   {
     files: ["public/**/*.js"],
     languageOptions: { globals: globals.browser },
@@ -55,7 +56,7 @@ export default [
     },
   },
   {
-    files: ["public/app.js"],
+    files: ["public/app.js", "public/ui/**/*.js"],
     languageOptions: { globals: { flatpickr: "readonly", track: "readonly" } },
   },
 ];

@@ -2,13 +2,15 @@
 
 ## Test the front end
 
-`public/app.js` runs against the page as soon as it loads, so it's tested
-through the pure modules it imports from `public/lib/`. `public/events.js`
-runs in a jsdom page.
+The modules in `public/ui/` work on the page as soon as they load, so
+they're tested through the pure modules they import from `public/lib/`.
+`public/events.js` runs in a jsdom page.
 
-- [ ] Test what's left in `public/app.js` (rendering, playback, the
-      play-by-play and court links) by loading it into a jsdom page with
-      stubbed `/api/*` responses.
+- [ ] Test the `public/ui/` modules (rendering, playback, the play-by-play
+      and court links) by loading the page into jsdom with stubbed `/api/*`
+      responses.
+- [ ] Move the win probability math in `public/ui/winprob.js` into
+      `public/lib/` so it can be tested on its own.
 
 ## Features
 

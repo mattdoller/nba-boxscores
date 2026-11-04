@@ -101,9 +101,12 @@ To serve only what's cached from the real cache too, start the server with
   the stats.nba.com endpoints, their parameters, and the headers the site
   expects. Responses are cached in SQLite by request URL (`nba-api/cache.js`):
   forever once a game is final, for a minute while it's in progress.
-- **`public/`** is the front end, with no build step. `app.js` runs the page;
-  the logic it shares and the tests cover lives in `public/lib/` (court
-  projection, shot zones, stat sorting, saved settings).
+- **`public/`** is the front end, with no build step. `app.js` starts the
+  page and wires up its events. Each part of the page is a module in
+  `public/ui/` (box score, shot chart, zones, playback, play-by-play, scoring
+  trend, player card, and so on), sharing what's on screen through
+  `ui/state.js`. Pure logic, which the tests cover, lives in `public/lib/`
+  (court projection, shot zones, stat sorting, saved settings).
 - **`dev/`** has tools for working on the app; `fake-season.js` makes the
   fake games for `bin/load-fixtures`.
 - **`test/`** uses Node's built-in test runner. stats.nba.com is stubbed and
