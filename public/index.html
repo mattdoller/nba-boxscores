@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Box Scores</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Pick day or night before the first paint so night mode never flashes light.
+  // A saved choice wins; otherwise follow the system setting.
+  (() => {
+    let theme = null;
+    try {
+      theme = localStorage.getItem("theme");
+    } catch {}
+    if (theme !== "light" && theme !== "dark") {
+      theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.dataset.theme = theme;
+    // Same for a collapsed control panel, so the page never shifts once drawn.
+    try {
+      if (localStorage.getItem("panel") === "collapsed") {
+        document.documentElement.dataset.panel = "collapsed";
+      }
+    } catch {}
+  })();
+</script>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <div class="panel-header">
+      <h1>NBA Box Scores</h1>
+      <button type="button" id="panelToggle" class="icon-button panel-toggle" aria-expanded="true"
+        aria-controls="panelBody" aria-label="Controls" title="Hide controls">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M9 4v16" />
+          <path class="panel-chevron" d="M15.5 9.5L13 12l2.5 2.5" />
+        </svg>
+      </button>
+      <button type="button" id="themeToggle" class="icon-button theme-toggle" aria-pressed="false" aria-label="Night mode" title="Switch to night mode">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <g class="bulb-rays">
+            <path d="M12 0.5v1.5M3.5 4l1.1 1.1M20.5 4l-1.1 1.1M1 11h1.5M21.5 11H23" />
+          </g>
+          <path class="bulb-glass" d="M12 4a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1V18h5v-1.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 4z" />
+          <path class="bulb-base" d="M9.5 20.5h5M10.5 23h3" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="panelBody" class="panel-body">
+      <label class="field">
+        <span>Team</span>
+        <select id="teamSelect" disabled>
+          <option value="">Loading teams…</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Season</span>
+        <select id="seasonSelect"></select>
+      </label>
+
+      <div class="field">
+        <span>Game date</span>
+        <div id="calendar"></div>
+        <p class="hint" id="calendarHint">Choose a team to see the dates it played.</p>
+      </div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div id="status" class="status"></div>
+    <div id="boxscore"></div>
+  </main>
+</div>
+
+<div id="apiActivity" class="api-activity" role="status" aria-live="polite">
+  <span class="spinner" aria-hidden="true"></span>
+  <span class="api-activity-label"></span>
+</div>
+
+<!-- The player card, opened from a name in a box score (see app.js). -->
+<dialog id="playerDialog" class="player-dialog" aria-labelledby="playerDialogTitle"></dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script src="events.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

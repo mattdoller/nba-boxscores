@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#
+# Gets a fresh checkout ready to run: checks Node, installs dependencies,
+# and creates .env from .env.example.
+
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: bin/setup [options]
+
+Get the app ready to run: check that Node is new enough, install
+dependencies with npm, and copy .env.example to .env if there's no
+.env yet. Safe to run again; an existing .env is left alone.
+
+Options:
+  -h, --help             Show this help and exit
+
+Examples:
+  bin/setup
+  bin/setup && bin/server
+EOF
+}
+
+fail() {
+  echo "bin/setup: $1" >&2
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "bin/setup: unknown option '$1'" >&2
+      echo "Run 'bin/setup --help' for usage." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# package.json and .env.example live in the project root, so run from there
+# no matter where this is called from.
+cd "$(dirname "$0")/.."
+
+# The server uses import.meta.main (Node 24.2) and the built-in node:sqlite.
+command -v node >/dev/null || fail "Node isn't installed; install Node 24.2 or newer"
+node -e '
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  process.exit(major > 24 || (major === 24 && minor >= 2) ? 0 : 1);
+' || fail "Node $(node --version) is too old; install Node 24.2 or newer"
+
+echo "Installing dependencies..."
+npm install
+
+if [[ -f .env ]]; then
+  echo ".env already exists; leaving it as is."
+else
+  cp .env.example .env
+  echo "Created .env from .env.example. Edit it to change the port or cache location."
+fi
+
+echo "Done. Start the server with bin/server."

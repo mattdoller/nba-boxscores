@@ -1,0 +1,166 @@
+#!/usr/bin/env node
+//
+// Fills a separate cache with fake games, so the app can be tried without
+// stats.nba.com or a backfilled season.
+
+import { existsSync, rmSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+const DEFAULT_DB = "data/fixtures.sqlite";
+const REAL_CACHE_DEFAULT = "data/nba-cache.sqlite";
+
+const USAGE = `Usage: bin/load-fixtures [options]
+
+Fill a cache with a fake season: the real 30 teams with made-up players,
+schedules, and games (box scores, play-by-play, and shot charts that agree
+with each other). Point the server at it to try the app without
+stats.nba.com:
+
+  bin/load-fixtures
+  bin/server --cache-db ${DEFAULT_DB}
+
+The fixtures get their own cache file, never the real one. Running again
+with the same options makes the same games.
+
+Options:
+  -s, --season YEAR      Season to fill, by the year it starts
+                         (default: last season)
+  -g, --games N          Games per team, 1 to 82 (default: 10)
+      --seed N           Seed for the made-up data; another seed makes
+                         other players and games (default: 1)
+  -c, --cache-db PATH    Cache file to fill (default: ${DEFAULT_DB})
+  -r, --reset            Delete the cache file first, so it holds only
+                         this run's games
+  -h, --help             Show this help and exit
+
+Examples:
+  bin/load-fixtures
+  bin/load-fixtures --games 82 --reset
+  bin/load-fixtures --season 2024 --seed 7
+`;
+
+function fail(message) {
+  console.error(`bin/load-fixtures: ${message}`);
+  console.error("Run 'bin/load-fixtures --help' for usage.");
+  process.exit(1);
+}
+
+let args;
+try {
+  ({ values: args } = parseArgs({
+    options: {
+      season: { type: "string", short: "s" },
+      games: { type: "string", short: "g", default: "10" },
+      seed: { type: "string", default: "1" },
+      "cache-db": { type: "string", short: "c", default: DEFAULT_DB },
+      reset: { type: "boolean", short: "r" },
+      help: { type: "boolean", short: "h" },
+    },
+  }));
+} catch (err) {
+  fail(err.message);
+}
+
+if (args.help) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+
+const gamesPerTeam = Number(args.games);
+if (!Number.isInteger(gamesPerTeam) || gamesPerTeam < 1 || gamesPerTeam > 82) {
+  fail(`games must be a whole number from 1 to 82, got '${args.games}'`);
+}
+const seed = Number(args.seed);
+if (!Number.isInteger(seed)) {
+  fail(`seed must be a whole number, got '${args.seed}'`);
+}
+
+// Paths are relative to the project root, and .env may name the real cache,
+// so both have to be in place before the cache module opens a database.
+process.chdir(dirname(dirname(fileURLToPath(import.meta.url))));
+if (existsSync(".env")) {
+  process.loadEnvFile(".env");
+}
+
+const dbPath = args["cache-db"];
+const realCache = process.env.NBA_CACHE_DB || REAL_CACHE_DEFAULT;
+if (resolve(dbPath) === resolve(realCache)) {
+  fail(`${dbPath} is the real cache; fake games would mix in with real ones. Pick another file.`);
+}
+if (args.reset) {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    rmSync(`${dbPath}${suffix}`, { force: true });
+  }
+}
+process.env.NBA_CACHE_DB = dbPath;
+
+const { SeasonType, getTeams, seasonString, teamGameLog } = await import("../nba-api/index.js");
+const { cacheGame, cachePlayer } = await import("../server.js");
+const { currentSeason } = await import("../public/lib/format.js");
+const { fakeSeason } = await import("../dev/fake-season.js");
+const { markFixtures } = await import("../nba-api/cache.js");
+
+const season = Number(args.season ?? currentSeason() - 1);
+if (!/^\d{4}$/.test(String(season)) || season > currentSeason()) {
+  fail(`season must be a start year no later than ${currentSeason()}`);
+}
+
+console.log(`Making ${gamesPerTeam} fake games per team for ${seasonString(season)} (seed ${seed})...`);
+const fake = fakeSeason({ season, gamesPerTeam, seed });
+
+// The responses go through the same endpoint functions the server uses, so
+// they're cached under exactly the URLs it looks up. This stands in for
+// stats.nba.com; nothing goes over the network.
+const emptyLog = { resultSets: [{ name: "TeamGameLog", headers: [], rowSet: [] }] };
+globalThis.fetch = async (input) => {
+  const url = new URL(input);
+  const endpoint = url.pathname.split("/").pop();
+  const params = url.searchParams;
+  let body;
+  if (endpoint === "teamgamelog") {
+    body = emptyLog;
+    if (params.get("SeasonType") === SeasonType.regular) {
+      body = fake.teamgamelog.get(Number(params.get("TeamID")));
+    }
+  } else if (endpoint === "leaguedashteamstats") {
+    body = fake.league.get(Number(params.get("Season").slice(0, 4)));
+  } else if (endpoint === "playercareerstats") {
+    body = fake.players.get(Number(params.get("PlayerID")))?.career;
+  } else if (endpoint === "shotchartdetail" && params.get("PlayerID") !== "0") {
+    // A player's whole season, rather than one game's shots.
+    const season = Number(params.get("Season").slice(0, 4));
+    body = fake.players.get(Number(params.get("PlayerID")))?.shotCharts.get(season);
+  } else {
+    body = fake.byGame.get(params.get("GameID"))?.[endpoint];
+  }
+  if (!body) {
+    return new Response("Not a fake request", { status: 404 });
+  }
+  return Response.json(body);
+};
+
+for (const team of getTeams()) {
+  for (const seasonType of [SeasonType.regular, SeasonType.playIn, SeasonType.playoffs]) {
+    await teamGameLog({ teamId: team.id, season, seasonType });
+  }
+}
+for (const gameId of fake.byGame.keys()) {
+  await cacheGame(gameId);
+}
+for (const playerId of fake.players.keys()) {
+  await cachePlayer(playerId);
+}
+// The app shows a notice that the data is made up when the cache says so.
+markFixtures();
+
+const games = [...fake.byGame.values()];
+const first = games[0];
+console.log(`Cached ${games.length} games, ${first.date} to ${games.at(-1).date}, and ${fake.players.size} players' careers, in ${dbPath}.`);
+console.log("");
+console.log("Start the server on them with:");
+console.log(`  bin/server --cache-db ${dbPath}`);
+console.log("");
+console.log(`Then try http://localhost:3000/#team=${first.home}&season=${season}&date=${first.date}`);
+console.log(`(${first.away} ${first.score.away}, ${first.home} ${first.score.home}).`);

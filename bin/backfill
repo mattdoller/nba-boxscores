@@ -1,0 +1,140 @@
+#!/usr/bin/env node
+//
+// Fills the stats.nba.com response cache with every game in a season, so
+// they open instantly and don't depend on stats.nba.com being up.
+
+import { dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+const USAGE = `Usage: bin/backfill [options]
+
+Fetch and cache every game in a season: box score, summary,
+play-by-play, and shot chart, the same requests the app makes when a
+game is opened. Games already cached aren't fetched again, so it's safe
+to stop and rerun.
+
+Options:
+  -s, --season YEAR      Season to fetch, by the year it starts
+                         (default: last season)
+  -d, --delay SECONDS    Wait at least this long between requests to
+                         stats.nba.com (default: 2)
+  -h, --help             Show this help and exit
+
+Stops after 3 failed games in a row, since stats.nba.com is then
+probably throttling or blocking requests; try again later.
+
+Examples:
+  bin/backfill
+  bin/backfill --season 2024 --delay 3
+`;
+
+// Consecutive failed games before giving up.
+const MAX_FAILURES = 3;
+
+function fail(message) {
+  console.error(`bin/backfill: ${message}`);
+  console.error("Run 'bin/backfill --help' for usage.");
+  process.exit(1);
+}
+
+let args;
+try {
+  ({ values: args } = parseArgs({
+    options: {
+      season: { type: "string", short: "s" },
+      delay: { type: "string", short: "d", default: "2" },
+      help: { type: "boolean", short: "h" },
+    },
+  }));
+} catch (err) {
+  fail(err.message);
+}
+
+if (args.help) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+
+const delayMs = Number(args.delay) * 1000;
+if (!Number.isFinite(delayMs) || delayMs < 0) {
+  fail(`delay must be a number of seconds, got '${args.delay}'`);
+}
+
+// The cache path is relative to the project root and may be set in .env,
+// so both have to be in place before the cache module opens the database.
+process.chdir(dirname(dirname(fileURLToPath(import.meta.url))));
+if (existsSync(".env")) {
+  process.loadEnvFile(".env");
+}
+const {
+  SeasonType,
+  getTeams,
+  seasonString,
+  teamGameLog,
+} = await import("../nba-api/index.js");
+const { cacheGame } = await import("../server.js");
+const { currentSeason } = await import("../public/lib/format.js");
+
+const season = Number(args.season ?? currentSeason() - 1);
+if (!/^\d{4}$/.test(String(season)) || season >= currentSeason()) {
+  fail(`season must be a finished season's start year, before ${currentSeason()}`);
+}
+
+// Cache hits never reach fetch, so spacing out fetch itself paces only the
+// requests that go to stats.nba.com, retries included. Each request claims
+// its slot before waiting, since a game's requests are made concurrently.
+const realFetch = globalThis.fetch;
+let nextFetchAt = 0;
+let fetches = 0;
+globalThis.fetch = async (...fetchArgs) => {
+  const at = Math.max(Date.now(), nextFetchAt);
+  nextFetchAt = at + delayMs;
+  await sleep(at - Date.now());
+  fetches++;
+  return realFetch(...fetchArgs);
+};
+
+console.log(`Finding ${seasonString(season)} games...`);
+const games = new Map();
+for (const team of getTeams()) {
+  for (const seasonType of [SeasonType.regular, SeasonType.playIn, SeasonType.playoffs]) {
+    const log = await teamGameLog({ teamId: team.id, season, seasonType });
+    for (const g of log.TeamGameLog ?? []) {
+      games.set(g.Game_ID, `${g.GAME_DATE} ${g.MATCHUP}`);
+    }
+  }
+}
+
+const ids = [...games.keys()].sort();
+console.log(`Found ${ids.length} games.`);
+
+let failures = 0;
+let failed = 0;
+for (const [i, gameId] of ids.entries()) {
+  const label = `[${i + 1}/${ids.length}] ${gameId} ${games.get(gameId)}`;
+  const before = fetches;
+  try {
+    await cacheGame(gameId);
+    failures = 0;
+    if (fetches > before) {
+      console.log(`${label}: fetched`);
+    }
+  } catch (err) {
+    failures++;
+    failed++;
+    console.error(`${label}: ${err.message}`);
+    if (failures >= MAX_FAILURES) {
+      console.error(`Stopping after ${MAX_FAILURES} failed games in a row. Rerun later to pick up where this left off.`);
+      process.exit(1);
+    }
+  }
+}
+
+console.log(`Done: ${ids.length - failed} of ${ids.length} games cached, ${fetches} requests to stats.nba.com.`);
+if (failed > 0) {
+  console.log(`Rerun to retry the ${failed} that failed.`);
+  process.exit(1);
+}

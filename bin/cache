@@ -1,0 +1,250 @@
+#!/usr/bin/env node
+//
+// Shows or cleans up the stats.nba.com response cache.
+
+import { existsSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { seasonString } from "../nba-api/parameters.js";
+
+const USAGE = `Usage: bin/cache [options]
+
+Show or clean up the stats.nba.com response cache. With no options,
+shows what's in it.
+
+Options:
+  -s, --stats            Show responses, sizes, and fetch times by endpoint
+  -p, --prune            Delete expired responses
+      --prune-season YEAR
+                         Delete everything cached for a season, by the
+                         year it starts: 2025 is 2025-26 (asks first)
+  -c, --clear            Delete every response (asks first)
+  -e, --endpoint NAME    With --clear, only delete NAME's responses
+  -y, --yes              With --clear or --prune-season, don't ask first
+      --cache-db PATH    Cache file to use (default: NBA_CACHE_DB from
+                         .env, or data/nba-cache.sqlite)
+  -h, --help             Show this help and exit
+
+Deleted responses are fetched from stats.nba.com again the next time
+they're needed; bin/backfill fetches a whole season again.
+
+Examples:
+  bin/cache
+  bin/cache --prune
+  bin/cache --prune-season 2025
+  bin/cache --clear --endpoint playbyplayv3
+  bin/cache --cache-db data/fixtures.sqlite
+`;
+
+// The league's first season was 1946-47.
+const FIRST_SEASON = 1946;
+
+function fail(message) {
+  console.error(`bin/cache: ${message}`);
+  console.error("Run 'bin/cache --help' for usage.");
+  process.exit(1);
+}
+
+let args;
+try {
+  ({ values: args } = parseArgs({
+    options: {
+      stats: { type: "boolean", short: "s" },
+      prune: { type: "boolean", short: "p" },
+      "prune-season": { type: "string" },
+      clear: { type: "boolean", short: "c" },
+      endpoint: { type: "string", short: "e" },
+      yes: { type: "boolean", short: "y" },
+      "cache-db": { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+  }));
+} catch (err) {
+  fail(err.message);
+}
+
+if (args.help) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+
+const actions = ["stats", "prune", "prune-season", "clear"].filter((a) => args[a] !== undefined);
+if (actions.length > 1) {
+  fail(`choose one of --${actions.join(", --")}`);
+}
+if (args.endpoint && !args.clear) {
+  fail("--endpoint only goes with --clear");
+}
+if (args.yes && !args.clear && args["prune-season"] === undefined) {
+  fail("--yes only goes with --clear or --prune-season");
+}
+
+let season = null;
+if (args["prune-season"] !== undefined) {
+  season = Number(args["prune-season"]);
+  if (!/^\d{4}$/.test(args["prune-season"]) || season < FIRST_SEASON) {
+    fail(`--prune-season takes the year a season starts, like 2025 for 2025-26; got '${args["prune-season"]}'`);
+  }
+}
+
+// A cache file named on the command line is relative to where the command
+// was run. It has to exist: opening a mistyped path would create an empty
+// cache there.
+let cacheDb = null;
+if (args["cache-db"] !== undefined) {
+  cacheDb = resolve(args["cache-db"]);
+  if (!existsSync(cacheDb)) {
+    fail(`there's no cache at ${args["cache-db"]}`);
+  }
+}
+
+// The default cache path is relative to the project root and may be set in
+// .env, so both have to be in place before the cache module opens the
+// database. --cache-db wins over .env.
+process.chdir(dirname(dirname(fileURLToPath(import.meta.url))));
+if (existsSync(".env")) {
+  process.loadEnvFile(".env");
+}
+if (cacheDb) {
+  process.env.NBA_CACHE_DB = cacheDb;
+}
+const {
+  cachePath,
+  cacheStats,
+  clearCache,
+  clearSeason,
+  pruneCache,
+  seasonCacheStats,
+} = await import("../nba-api/cache.js");
+
+function formatBytes(bytes) {
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  if (unit === 0) {
+    return `${value} B`;
+  }
+
+  return `${value.toFixed(1)} ${units[unit]}`;
+}
+
+// SQLite keeps recent writes in -wal and -shm files beside the database.
+function sizeOnDisk() {
+  return ["", "-wal", "-shm"]
+    .map((suffix) => `${cachePath}${suffix}`)
+    .filter((path) => existsSync(path))
+    .reduce((sum, path) => sum + statSync(path).size, 0);
+}
+
+function plural(count, noun) {
+  if (count === 1) {
+    return `${count} ${noun}`;
+  }
+
+  return `${count} ${noun}s`;
+}
+
+function showStats() {
+  const rows = cacheStats();
+  console.log(`Cache: ${cachePath}, ${formatBytes(sizeOnDisk())} on disk\n`);
+  if (rows.length === 0) {
+    console.log("No cached responses.");
+    return;
+  }
+
+  const total = {
+    endpoint: "Total",
+    responses: rows.reduce((sum, r) => sum + r.responses, 0),
+    expired: rows.reduce((sum, r) => sum + r.expired, 0),
+    bytes: rows.reduce((sum, r) => sum + r.bytes, 0),
+  };
+  const table = [...rows, total].map((r) => [
+    r.endpoint,
+    String(r.responses),
+    String(r.expired),
+    formatBytes(r.bytes),
+    r.newest ? new Date(r.newest).toISOString().slice(0, 10) : "",
+  ]);
+  const header = ["Endpoint", "Responses", "Expired", "Size", "Last fetched"];
+  const widths = header.map((h, i) => Math.max(h.length, ...table.map((row) => row[i].length)));
+  const line = (cells) => cells
+    .map((cell, i) => {
+      if (i === 0 || i === cells.length - 1) {
+        return cell.padEnd(widths[i]);
+      }
+
+      return cell.padStart(widths[i]);
+    })
+    .join("  ")
+    .trimEnd();
+
+  console.log(line(header));
+  for (const row of table) {
+    console.log(line(row));
+  }
+}
+
+async function confirm(question) {
+  if (!process.stdin.isTTY) {
+    fail("--clear and --prune-season need --yes when not run in a terminal");
+  }
+
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await prompt.question(`${question} [y/N] `);
+  prompt.close();
+  return /^y(es)?$/i.test(answer.trim());
+}
+
+if (args.prune) {
+  const removed = pruneCache();
+  console.log(`Removed ${plural(removed, "expired response")}. Cache is ${formatBytes(sizeOnDisk())} on disk.`);
+} else if (season !== null) {
+  const label = seasonString(season);
+  const rows = seasonCacheStats(season);
+  const count = rows.reduce((sum, r) => sum + r.responses, 0);
+  if (count === 0) {
+    console.log(`Nothing cached for ${label} in ${cachePath}.`);
+    process.exit(0);
+  }
+
+  console.log(`Cached for ${label} in ${cachePath}:`);
+  const width = Math.max(...rows.map((r) => r.endpoint.length));
+  for (const r of rows) {
+    console.log(`  ${r.endpoint.padEnd(width)}  ${plural(r.responses, "response").padStart(15)}  ${formatBytes(r.bytes)}`);
+  }
+  if (!args.yes && !(await confirm(`Delete ${plural(count, "cached response")} for ${label}?`))) {
+    console.log("Nothing deleted.");
+    process.exit(0);
+  }
+
+  const removed = clearSeason(season);
+  console.log(`Removed ${plural(removed, "response")} for ${label}. Cache is ${formatBytes(sizeOnDisk())} on disk.`);
+} else if (args.clear) {
+  const rows = cacheStats().filter((r) => !args.endpoint || r.endpoint === args.endpoint);
+  const count = rows.reduce((sum, r) => sum + r.responses, 0);
+  if (count === 0) {
+    const known = cacheStats().map((r) => r.endpoint).join(", ") || "none";
+    console.log(`Nothing to delete. Cached endpoints: ${known}.`);
+    process.exit(0);
+  }
+
+  let what = `all ${plural(count, "cached response")}`;
+  if (args.endpoint) {
+    what = `${plural(count, "cached response")} from ${args.endpoint}`;
+  }
+  if (!args.yes && !(await confirm(`Delete ${what}?`))) {
+    console.log("Nothing deleted.");
+    process.exit(0);
+  }
+
+  const removed = clearCache(args.endpoint);
+  console.log(`Removed ${plural(removed, "response")}. Cache is ${formatBytes(sizeOnDisk())} on disk.`);
+} else {
+  showStats();
+}

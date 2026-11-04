@@ -1,0 +1,2100 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --text: #1c1f24;
+  --muted: #6b7280;
+  --border: #e3e5e9;
+  /* Neutral so it never competes with team colors. */
+  --accent: #1c1f24;
+  /* Text on an --accent background. */
+  --on-accent: #ffffff;
+  --accent-soft: #e5e7eb;
+  --error: #b91c1c;
+  --row-alt: #fafbfc;
+  --hover: #eef1f5;
+  --hover-cross: #dde3eb;
+  --shadow: rgb(0 0 0 / 0.06);
+  /* The tooltip stays dark in both themes. */
+  --tooltip-bg: #1c1f24;
+  --tooltip-text: #ffffff;
+  --tooltip-muted: #c4c8cf;
+  --tooltip-border: transparent;
+  --court-line: #d4d7dc;
+  --court-three: #f3f4f6;
+  --court-key: #e5e7eb;
+  --court-on-key: #ffffff;
+  --court-ring: #9ca3af;
+  /* Floorboard outlines, see-through so they show on the shading too. */
+  --court-grain: rgb(28 31 36 / 0.07);
+  /* The notice over games made up by bin/load-fixtures. */
+  --test-notice-bg: #fdecec;
+  --test-notice-border: #f4b4b4;
+  --test-notice-text: #9b1c1c;
+  /* Hot/cold zones: better and worse than the league from a zone. */
+  --zone-hot: #e03131;
+  --zone-cold: #1c7ed6;
+  --backboard: rgb(255 255 255 / 0.75);
+  --ball-shadow: #1c1f24;
+  --bulb: #facc15;
+  /* Outline on the live scores riding the trend lines. */
+  --score-outline: #ffffff;
+}
+
+/* Night mode: light text on dark surfaces. Team colors too dark to see here
+   are lightened in app.js (teamColor). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --panel: #181b20;
+  --text: #e6e8eb;
+  --muted: #9aa1ac;
+  --border: #2c313a;
+  --accent: #e6e8eb;
+  --on-accent: #14161a;
+  --accent-soft: #2c313a;
+  --error: #f87171;
+  --row-alt: #1c1f25;
+  --hover: #232831;
+  --hover-cross: #2e3540;
+  --shadow: rgb(0 0 0 / 0.4);
+  --tooltip-bg: #2c313a;
+  --tooltip-text: #f3f4f6;
+  --tooltip-muted: #aab0ba;
+  --tooltip-border: #3d434d;
+  --court-line: #3a404a;
+  --court-three: #1f2329;
+  --court-key: #272c34;
+  --court-on-key: #4a515c;
+  --court-ring: #6b7280;
+  --court-grain: rgb(255 255 255 / 0.05);
+  --test-notice-bg: #3b1518;
+  --test-notice-border: #6e2328;
+  --test-notice-text: #fca5a5;
+  --backboard: rgb(24 27 32 / 0.75);
+  --ball-shadow: #000000;
+  --score-outline: #000000;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  min-height: 100vh;
+}
+
+/* Stays put while the box score scrolls. */
+.panel {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 24px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.panel h1 {
+  margin: 0 auto 0 0;
+  font-size: 22px;
+}
+
+/* Round buttons in the panel header. */
+.icon-button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--hover);
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icon-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Day/night switch: a lit bulb by day, an unlit one at night. */
+.theme-toggle .bulb-glass {
+  fill: var(--bulb);
+}
+
+.theme-toggle .bulb-rays {
+  stroke: #eab308;
+}
+
+:root[data-theme="dark"] .theme-toggle .bulb-glass {
+  fill: none;
+}
+
+:root[data-theme="dark"] .theme-toggle .bulb-rays {
+  display: none;
+}
+
+/* Folds the panel away to give the game more room. Collapsed, the panel is
+   a narrow strip holding just its two buttons, and the chevron flips to
+   point out. */
+:root[data-panel="collapsed"] .panel-body {
+  display: none;
+}
+
+:root[data-panel="collapsed"] .panel-toggle .panel-chevron {
+  transform: scaleX(-1);
+  transform-origin: 14.25px 12px;
+}
+
+:root[data-panel="collapsed"] .app {
+  grid-template-columns: 70px 1fr;
+}
+
+:root[data-panel="collapsed"] .panel {
+  padding: 24px 16px;
+}
+
+:root[data-panel="collapsed"] .panel-header {
+  flex-direction: column;
+}
+
+:root[data-panel="collapsed"] .panel h1 {
+  display: none;
+}
+
+.field {
+  display: block;
+  margin-bottom: 20px;
+}
+
+.field > span {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+/* Hide flatpickr's text input; only the inline calendar is shown. */
+#calendar {
+  display: none;
+}
+
+.flatpickr-calendar.inline {
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+
+/* The month dropdown and year spinner give way to a plain label (app.js). */
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month .numInputWrapper {
+  display: none;
+}
+
+.flatpickr-current-month .month-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* At the season's first or last month, flatpickr hides the arrow; keep it
+   visible but dimmed so the header doesn't shift. */
+.flatpickr-months .flatpickr-prev-month.flatpickr-disabled,
+.flatpickr-months .flatpickr-next-month.flatpickr-disabled {
+  display: block;
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+
+.flatpickr-day:not(.flatpickr-disabled):not(.selected) {
+  font-weight: 700;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* flatpickr's stylesheet is light-only; recolor the calendar for night mode. */
+:root[data-theme="dark"] .flatpickr-calendar {
+  background: var(--panel);
+}
+
+:root[data-theme="dark"] .flatpickr-months .flatpickr-prev-month,
+:root[data-theme="dark"] .flatpickr-months .flatpickr-next-month {
+  color: var(--text);
+  fill: var(--text);
+}
+
+:root[data-theme="dark"] span.flatpickr-weekday {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .flatpickr-day {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .flatpickr-day.selected {
+  color: var(--on-accent);
+}
+
+:root[data-theme="dark"] .flatpickr-day.flatpickr-disabled,
+:root[data-theme="dark"] .flatpickr-day.prevMonthDay,
+:root[data-theme="dark"] .flatpickr-day.nextMonthDay {
+  color: rgb(255 255 255 / 0.2);
+}
+
+:root[data-theme="dark"] .flatpickr-day:not(.flatpickr-disabled):hover {
+  background: var(--hover-cross);
+  border-color: var(--hover-cross);
+}
+
+/* No overflow here: it would make this a scroll container and stop the
+   scoreboard from sticking. Wide tables scroll inside .table-wrap instead. */
+.content {
+  min-width: 0;
+  padding: 0 32px 32px;
+}
+
+.status {
+  color: var(--muted);
+  margin: 32px 0 16px;
+}
+
+.status:empty {
+  margin: 0;
+}
+
+#boxscore {
+  padding-top: 32px;
+}
+
+#boxscore:empty {
+  padding-top: 0;
+}
+
+.status.error,
+.notice {
+  color: var(--error);
+}
+
+/* Shown while any API request is in flight. Fixed to the corner so it stays
+   in view on any screen and scroll position. It fades in after a short delay,
+   so requests answered from the cache don't make it flash. Tooltips (z-index
+   10) stay above it. */
+.api-activity {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: 0 4px 12px var(--shadow);
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.api-activity.active {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0.15s;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+}
+
+/* Says the games are made up (bin/load-fixtures), above the scoreboard. It
+   sits above the scoreboard's stacking layer so the scoreboard's shadow,
+   which reaches 32px up, doesn't paint over it. */
+.test-data-notice {
+  position: relative;
+  z-index: 6;
+  margin: 0 0 16px;
+  padding: 10px 16px;
+  border: 1px solid var(--test-notice-border);
+  border-radius: 10px;
+  background: var(--test-notice-bg);
+  color: var(--test-notice-text);
+  font-size: 14px;
+}
+
+/* Pinned to the top of the window. The box-shadow in the page background color
+   hides content scrolling by in the gap above it. */
+.scoreboard {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 -32px 0 var(--bg), 0 4px 10px var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.scoreboard .team {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "abbr score" "name score";
+  column-gap: 20px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.scoreboard .team.winner {
+  color: var(--text);
+}
+
+.scoreboard .abbr {
+  grid-area: abbr;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.scoreboard .name {
+  grid-area: name;
+  font-size: 13px;
+}
+
+/* Filled with the team's primary color and outlined in its secondary
+   (set inline by app.js). The stroke paints under the fill, so only its
+   outer half shows. */
+.scoreboard .score {
+  grid-area: score;
+  font-size: 40px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--team-primary, currentColor);
+  -webkit-text-stroke: 4px var(--team-secondary, transparent);
+  paint-order: stroke fill;
+}
+
+/* The quarter-by-quarter line score, at the scoreboard's right end. It drops
+   onto its own row when there isn't room beside the scores. */
+.scoreboard {
+  flex-wrap: wrap;
+}
+
+.scoreboard .linescore {
+  margin: 0;
+  font-size: 13px;
+}
+
+.scoreboard .linescore th,
+.scoreboard .linescore td {
+  padding: 4px 6px;
+}
+
+.scoreboard .meta .phrase {
+  white-space: nowrap;
+}
+
+.scoreboard .at {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+/* Date and status, venue, and crowd, one per line, centered in the space
+   between the scores and the line score, the size of the team names. */
+.scoreboard .meta {
+  /* Takes whatever width is left and wraps within it; below 120px the line
+     score moves to its own row instead. */
+  flex: 1 1 0;
+  min-width: 120px;
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.tag {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+table {
+  border-collapse: collapse;
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+
+th,
+td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+thead th {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* Sortable headers: the whole cell is the button. */
+.stats thead th {
+  padding: 0;
+}
+
+.stats .sort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.stats thead th:first-child .sort {
+  justify-content: flex-start;
+}
+
+.stats .sort:hover {
+  text-decoration: underline;
+}
+
+.stats .sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Arrow on the sorted column, pointing the way values run down the table. It
+   leads the label on right-aligned stat columns so the label stays lined up
+   with the numbers, and trails "Player". */
+.stats th[aria-sort="ascending"] .sort::before,
+.stats th:first-child[aria-sort="ascending"] .sort::after {
+  content: "▲";
+}
+
+.stats th[aria-sort="descending"] .sort::before,
+.stats th:first-child[aria-sort="descending"] .sort::after {
+  content: "▼";
+}
+
+.stats th:first-child .sort::before {
+  content: none;
+}
+
+.stats .sort::before,
+.stats .sort::after {
+  font-size: 8px;
+  color: var(--muted);
+}
+
+tbody th,
+tfoot th {
+  text-align: left;
+  font-weight: 600;
+}
+
+.linescore {
+  border: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+
+.linescore .total {
+  font-weight: 800;
+}
+
+.team-stats {
+  margin-bottom: 32px;
+}
+
+/* Box score, shot chart, and play-by-play sections that fold up under their heading. */
+.collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Chevron that points down when open and right when collapsed. */
+.collapsible > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s;
+}
+
+.collapsible:not([open]) > summary::before {
+  transform: rotate(-45deg);
+}
+
+.collapsible:not([open]) {
+  margin-bottom: 16px;
+}
+
+.collapsible > summary h2 {
+  font-size: 17px;
+  margin: 0;
+}
+
+.collapsible > summary:hover h2 {
+  text-decoration: underline;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.stats {
+  width: 100%;
+}
+
+.stats tbody tr:nth-child(even) {
+  background: var(--row-alt);
+}
+
+/* Cell backgrounds paint over the striped row background. */
+table tbody tr:hover > *,
+table .col-hover {
+  background: var(--hover);
+}
+
+table tbody tr:hover > .col-hover {
+  background: var(--hover-cross);
+}
+
+.stats tfoot td,
+.stats tfoot th {
+  font-weight: 700;
+  border-bottom: none;
+}
+
+.game-section {
+  margin-bottom: 32px;
+}
+
+.game-section h2 {
+  font-size: 17px;
+  margin: 0 0 10px;
+}
+
+.shotcharts {
+  display: grid;
+  gap: 16px;
+}
+
+.shotchart {
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+/* Each team's name and FG sit over the half of the court it shoots at. */
+.shotchart figcaption {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.court-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.court-team.right {
+  flex-direction: row-reverse;
+}
+
+.court-team .shooter:not(:empty) {
+  font-weight: 600;
+  color: var(--made, var(--text));
+}
+
+.court-team .shooter-fg {
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.court-team .shooter:not(:empty)::before {
+  content: "· ";
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.court-team.right .shooter:not(:empty)::before {
+  content: none;
+}
+
+.court-team.right .shooter:not(:empty)::after {
+  content: " ·";
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.court-team .fg {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.key.made {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--made, var(--accent));
+}
+
+.shotchart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.court-floor {
+  fill: var(--panel);
+  stroke: var(--court-line);
+  stroke-width: 2;
+}
+
+.court-line {
+  fill: none;
+  stroke: var(--court-line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.court-line.dashed {
+  stroke-dasharray: 8 8;
+}
+
+/* The lines shots are measured from stand out a little more. */
+.court-line.three-point-line,
+.court-line.free-throw-line {
+  stroke-width: 3.5;
+}
+
+/* Floor shading: light gray inside the three-point lines, a step darker in
+   the keys and the center disk. */
+.three-point-area {
+  fill: var(--court-three);
+}
+
+.key-area {
+  fill: var(--court-key);
+}
+
+/* The dashed free-throw half circle and the restricted-area arc sit on the
+   shaded key, so they're a step lighter than it (white by day). */
+.court-line.on-key {
+  stroke: var(--court-on-key);
+}
+
+.center-disk {
+  fill: var(--court-key);
+}
+
+.center-inner {
+  fill: var(--panel);
+}
+
+/* Faint board outlines over the floor color and shading, under the lines. */
+.floorboards {
+  fill: none;
+  stroke: var(--court-grain);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+/* The parquet's squares show a little more than the boards inside them. */
+.floorboards.parquet-squares {
+  stroke-width: 2;
+}
+
+.center-ring {
+  fill: none;
+  stroke: var(--court-ring);
+  stroke-width: 2.5;
+}
+
+/* Hoops stand above the floor; they never block hovering the shots under them. */
+.hoops {
+  pointer-events: none;
+}
+
+.backboard {
+  fill: var(--backboard);
+  stroke: var(--court-ring);
+  stroke-width: 1.5;
+}
+
+.stanchion {
+  fill: none;
+  stroke: var(--court-ring);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.rim {
+  fill: none;
+  stroke: #ee6730;
+  stroke-width: 2.5;
+}
+
+.shot.made {
+  fill: var(--made, var(--accent));
+  fill-opacity: 0.8;
+}
+
+.shot.missed path {
+  stroke: var(--muted);
+  stroke-width: 2.5;
+}
+
+.shot:hover {
+  fill-opacity: 1;
+  stroke: var(--text);
+}
+
+.shot {
+  cursor: pointer;
+}
+
+/* A shot whose play is hovered in the play-by-play, or that was just picked
+   from it, stands out with a ring. */
+.shot.made.linked,
+.shot.made.picked {
+  fill-opacity: 1;
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+
+.shot.missed.linked path,
+.shot.missed.picked path {
+  stroke: var(--text);
+  stroke-width: 3.5;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 10;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  border: 1px solid var(--tooltip-border);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+}
+
+.tooltip[hidden] {
+  display: none;
+}
+
+.tooltip .missed,
+.tooltip .muted {
+  color: var(--tooltip-muted);
+}
+
+.tooltip .tt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Play descriptions can be long; let them wrap instead of widening the tooltip. */
+.tooltip .tt-play {
+  max-width: 260px;
+  white-space: normal;
+}
+
+.tooltip .line-key {
+  /* Lifts dark team colors off the dark tooltip. */
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.5);
+}
+
+.trend {
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.trend svg {
+  display: block;
+  overflow: visible;
+}
+
+.trend svg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.trend-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.line-key {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.trend .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.trend .tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.end-label {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.end-label .end-value {
+  fill: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.crosshair line {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+/* A ring in the surface color keeps the dots legible where they cross a line. */
+.crosshair circle {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+/* The live score at each line's head during playback, outlined like the
+   scores on the shot chart floor. */
+.trend-head {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.trend-head-score {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--score-outline);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+/* Final-score labels wait until playback reaches the end. */
+.trend svg.playing .end-labels {
+  visibility: hidden;
+}
+
+.trend-hit {
+  fill: transparent;
+  cursor: crosshair;
+  /* Sideways drags select a range; vertical ones still scroll the page. */
+  touch-action: pan-y;
+}
+
+/* A scoring run, in a faint wash of its team's color under the lines. */
+.trend-run {
+  fill-opacity: 0.12;
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  transition: fill-opacity 0.15s;
+}
+
+.trend-run.hovered {
+  fill-opacity: 0.24;
+  stroke-opacity: 0.6;
+}
+
+/* Win probability (a trial): the home team's chance to win, in its color
+   above the dashed 50% line and the away team's below. */
+.wp-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-dasharray: 5 3;
+}
+
+.wp-mid {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+/* Legend key: the home color over the away color, dashed like the line. */
+.line-key.wp-key {
+  height: 4px;
+  background: linear-gradient(var(--above) 50%, var(--below) 50%);
+}
+
+.trend-selection {
+  fill: var(--accent);
+  fill-opacity: 0.08;
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+/* Undoes the page's table styles, which are meant for the box score. */
+.tooltip .tt-range {
+  margin: 4px 0;
+  background: none;
+  font-size: inherit;
+}
+
+.tooltip .tt-range tr > * {
+  background: none;
+  border: none;
+}
+
+.tooltip .tt-range th {
+  padding: 0 0 2px 14px;
+  color: var(--tooltip-muted);
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.tooltip .tt-range td {
+  padding: 1px 0 1px 14px;
+}
+
+.tooltip .tt-range th:first-child,
+.tooltip .tt-range td:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.legend .key.missed {
+  margin-left: 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Scoring trend on the shot chart floor (a trial). It sits under the shot
+   marks and lets them show through. */
+.court-trend {
+  pointer-events: none;
+}
+
+.court-trend-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-opacity: 0.75;
+}
+
+.court-trend-head {
+  stroke: var(--panel);
+  stroke-width: 1.5;
+}
+
+/* Outlined in white by day and black at night. The stroke paints under the
+   fill, so only its outer half shows. Its width is set in app.js, in step
+   with the text's size, which shrinks toward the far end of the court. */
+.court-trend-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--score-outline);
+  stroke-linejoin: round;
+}
+
+.court-trend-toggle,
+.chart-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.zones-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* Hot/cold zones sit on the floor under the boards and lines. A zone with
+   no attempts keeps the plain floor color. */
+.zone {
+  fill: var(--panel);
+  stroke: var(--court-line);
+  stroke-width: 1;
+}
+
+/* The hovered zone's edge (drawn by outlineZone in app.js). */
+.zone-outline {
+  pointer-events: none;
+}
+
+.zone-outline feFlood {
+  flood-color: var(--text);
+}
+
+/* A zone flashing as a shot is taken from it (animated in app.js). */
+.zone-pulse {
+  fill: var(--made, var(--accent));
+  stroke: var(--made, var(--accent));
+  stroke-width: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zones-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zones-key[hidden] {
+  display: none;
+}
+
+.zones-scale {
+  width: 72px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--zone-cold), var(--panel), var(--zone-hot));
+  border: 1px solid var(--border);
+}
+
+/* Pinned just below the scoreboard while the shot charts and play-by-play scroll. */
+.period-bar {
+  flex-wrap: wrap;
+  position: sticky;
+  top: calc(var(--scoreboard-height, 0px) + 8px);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 -8px 0 var(--bg);
+}
+
+.period-bar > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.period-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.play-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.play-button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.play-button:disabled {
+  border-color: var(--border);
+  color: var(--muted);
+  cursor: default;
+}
+
+.play-button span {
+  font-size: 10px;
+}
+
+/* Playback speed, cycling 1×, 2×, 4×, ½×. */
+.speed-button {
+  min-width: 38px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.speed-button:hover {
+  background: var(--hover);
+}
+
+/* Sits at the right end of the quarter bar. */
+.player-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.player-filter > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.player-button {
+  min-width: 180px;
+  padding: 5px 28px 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel) no-repeat right 10px center / 10px
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.5'/%3E%3C/svg%3E");
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.player-button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Checkbox list under the button; stays open while players are ticked. */
+.player-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 6;
+  width: 260px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+
+.player-menu[hidden] {
+  display: none;
+}
+
+.player-menu .show-all {
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.player-menu .show-all:hover,
+.player-menu label:hover {
+  background: var(--hover);
+}
+
+.player-menu fieldset {
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.player-menu legend {
+  width: 100%;
+  padding: 2px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.player-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* A team's own checkbox selects its whole roster. */
+.player-menu .team-toggle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.court-team.inactive {
+  opacity: 0.45;
+}
+
+.play-clock {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* The court with the play-by-play beside it. The panel takes the court's
+   height (contain: size keeps its long table from setting the row height)
+   and scrolls on its own. Folded, it's a thin strip with just its button. */
+.shot-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 32%, 420px);
+  gap: 16px;
+}
+
+.shot-layout.pbp-collapsed {
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+
+.pbp-panel {
+  contain: size;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pbp-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pbp-toggle:hover {
+  background: var(--hover);
+}
+
+.pbp-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.pbp-toggle svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Folded: the strip reads top to bottom, its chevron pointing back out.
+   Centered, so the pinned quarter bar can't cover it. */
+.pbp-collapsed .pbp-toggle {
+  flex: 1;
+  flex-direction: column-reverse;
+  justify-content: center;
+  padding: 12px 0;
+  border-bottom: none;
+}
+
+.pbp-collapsed .pbp-toggle-label {
+  writing-mode: vertical-rl;
+}
+
+.pbp-collapsed .pbp-toggle svg {
+  transform: rotate(180deg);
+}
+
+.pbp-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.pbp-scroll[hidden] {
+  display: none;
+}
+
+.pbp-scroll > .hint {
+  padding: 0 12px;
+}
+
+/* Inside the panel the table needs no frame of its own, and its header
+   stays put while the plays scroll. */
+.pbp-scroll .table-wrap {
+  overflow: visible;
+  border: none;
+  border-radius: 0;
+}
+
+.pbp-scroll table {
+  font-size: 13px;
+}
+
+.pbp-scroll th,
+.pbp-scroll td {
+  padding: 6px 8px;
+}
+
+/* The plays give up width so the time, team, and score always fit beside
+   them without the panel scrolling sideways. */
+.pbp-scroll .play {
+  overflow-wrap: anywhere;
+}
+
+.pbp-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+}
+
+/* The play playback is on, or the shot just clicked. */
+.pbp tbody tr.current > * {
+  background: color-mix(in srgb, var(--team, #6b7280) 24%, var(--panel));
+}
+
+/* Too narrow for both side by side: the play-by-play goes under the court,
+   at a fixed height. */
+@media (max-width: 1000px) {
+  .shot-layout,
+  .shot-layout.pbp-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .pbp-panel {
+    height: 420px;
+  }
+
+  .pbp-collapsed .pbp-panel {
+    height: auto;
+    contain: none;
+  }
+
+  .pbp-collapsed .pbp-toggle {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 10px 12px;
+  }
+
+  .pbp-collapsed .pbp-toggle-label {
+    writing-mode: horizontal-tb;
+  }
+
+  .pbp-collapsed .pbp-toggle svg {
+    transform: rotate(90deg);
+  }
+
+  .pbp-toggle svg {
+    transform: rotate(-90deg);
+  }
+}
+
+/* During playback, shots stay hidden (and unhoverable) until the playhead reaches them. */
+.shotcharts.animating .shot:not(.revealed),
+.shot.replaying:not(.revealed) {
+  visibility: hidden;
+}
+
+.shotcharts.animating .shot.revealed,
+.shot.replaying.revealed {
+  /* --pace (set during playback) shortens these in busy quarters. */
+  animation: shot-in calc(0.35s * var(--pace, 1)) ease-out;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Makes land bigger than misses. */
+.shotcharts.animating .shot.revealed.burst,
+.shot.replaying.revealed.burst {
+  animation: shot-in-big calc(0.45s * var(--pace, 1)) cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes shot-in {
+  from {
+    opacity: 0;
+    scale: 2.5;
+  }
+}
+
+@keyframes shot-in-big {
+  from {
+    opacity: 0;
+    scale: 4.5;
+  }
+}
+
+.flights {
+  pointer-events: none;
+}
+
+.flight-arc {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.flight-arc.made {
+  stroke: var(--made, var(--accent));
+  opacity: 0.6;
+}
+
+.flight-arc.missed {
+  stroke: var(--muted);
+  stroke-dasharray: 6 6;
+  opacity: 0.6;
+}
+
+.ball-shadow {
+  fill: var(--ball-shadow);
+}
+
+.flight-ball {
+  fill: #ee6730;
+  stroke: #7c2d12;
+  stroke-width: 1.5;
+}
+
+.rim-flash {
+  fill: none;
+  stroke: #ee6730;
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.make-burst {
+  fill: none;
+  stroke: var(--made, var(--accent));
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Flashes over the three-point line when a three goes in (see pulseThreePointLine). */
+.three-point-pulse {
+  fill: none;
+  stroke: var(--made, var(--accent));
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shotcharts.animating .shot.revealed {
+    animation: none;
+  }
+}
+
+.period-tabs button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.period-tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.pbp {
+  width: 100%;
+}
+
+.pbp .team {
+  text-align: left;
+  color: var(--muted);
+}
+
+.pbp .play {
+  text-align: left;
+  white-space: normal;
+  width: 100%;
+}
+
+/* Hovered rows take a light tint of the team's primary color (gray for plays
+   with no team, like period starts). */
+.pbp tbody tr:hover > * {
+  background: color-mix(in srgb, var(--team, #6b7280) 14%, var(--panel));
+}
+
+/* The play of a hovered shot gets the same tint as a hovered row. Plays with
+   a shot on the court, and made free throws, can be clicked to jump there. */
+.pbp tbody tr.linked > * {
+  background: color-mix(in srgb, var(--team, #6b7280) 14%, var(--panel));
+}
+
+.pbp tbody tr.has-shot,
+.pbp tbody tr.free-throw-made {
+  cursor: pointer;
+}
+
+.pbp tr.scored td {
+  font-weight: 600;
+}
+
+.pbp .period-divider th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.pos {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.notice-muted {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.dnp {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stacked layout: a pinned panel would cover the whole screen. */
+  .panel {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Collapsed, the panel keeps its title row across the top. */
+  :root[data-panel="collapsed"] .app {
+    grid-template-columns: 1fr;
+  }
+
+  :root[data-panel="collapsed"] .panel {
+    padding: 16px;
+  }
+
+  :root[data-panel="collapsed"] .panel-header {
+    flex-direction: row;
+    margin-bottom: 0;
+  }
+
+  :root[data-panel="collapsed"] .panel h1 {
+    display: block;
+  }
+
+  .content {
+    padding: 0 16px 16px;
+  }
+
+  #boxscore {
+    padding-top: 16px;
+  }
+
+  .scoreboard {
+    box-shadow: 0 -16px 0 var(--bg), 0 4px 10px var(--shadow);
+  }
+
+  /* On their own rows below the scores, line up with the teams. */
+  .scoreboard .meta {
+    text-align: left;
+  }
+}
+
+.pbp thead th:not(:last-child) {
+  text-align: left;
+}
+
+/* Player names in the box scores open the player's card. */
+.player-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-link:hover {
+  text-decoration: underline;
+}
+
+.player-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The player card: a modal over the game. */
+.player-dialog {
+  width: min(1000px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+}
+
+/* With every stat showing, the card widens to fit them. */
+.player-dialog.expanded {
+  width: min(1440px, calc(100% - 32px));
+}
+
+.player-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.player-card {
+  display: grid;
+  gap: 20px;
+  padding: 20px 24px 24px;
+}
+
+.player-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.player-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.player-card-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.player-card-about {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.player-card-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.player-card-close:hover {
+  background: var(--hover);
+}
+
+.player-card-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The card's tables have plain headers, not the box score's sort buttons,
+   so they need the padding those buttons bring. Names and teams line up
+   left. */
+.stats.career thead th,
+.zone-list thead th {
+  padding: 7px 10px;
+}
+
+.stats.career th:first-child,
+.zone-list th:first-child,
+.stats.career .text {
+  text-align: left;
+}
+
+/* The career heading with its controls beside it. */
+.card-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.card-section-head h3 {
+  margin: 0;
+}
+
+.card-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented button,
+.card-expand {
+  padding: 4px 10px;
+  border: 0;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border);
+}
+
+#cardShading[aria-pressed="true"],
+.segmented button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.card-expand {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* An icon in place of a label, as tall as the text buttons beside it. */
+.card-icon {
+  display: inline-grid;
+  align-self: stretch;
+  place-items: center;
+  padding: 0 8px;
+}
+
+.card-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.segmented button:hover:not([aria-pressed="true"]),
+.card-expand:hover {
+  background: var(--hover);
+}
+
+.segmented button:focus-visible,
+.card-expand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Seasons with shot data pick the zones below; the one shown is marked. */
+.stats.career tbody tr[data-season] {
+  cursor: pointer;
+}
+
+.stats.career tbody tr.picked > * {
+  background: var(--hover-cross);
+  font-weight: 600;
+}
+
+.card-zones-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.card-zones-head h3 {
+  margin: 0;
+}
+
+.card-zones-head label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.card-zones-head select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+/* The court beside the zone list; stacked when narrow. */
+.card-zones-body {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.card-court {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.card-court .backboard-line {
+  stroke: var(--court-ring);
+  stroke-width: 3;
+}
+
+/* Zone numbers, outlined in the floor color so they read on any shade. */
+.zone-label,
+.zone-count {
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.zone-label {
+  fill: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.zone-label.empty {
+  fill: var(--muted);
+  font-weight: 400;
+}
+
+.zone-count {
+  fill: var(--muted);
+  font-size: 12.5px;
+}
+
+.zone-list .hot {
+  color: var(--zone-hot);
+  font-weight: 600;
+}
+
+.zone-list .cold {
+  color: var(--zone-cold);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .player-card {
+    padding: 16px;
+  }
+
+  .card-zones-body {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,27 @@
+# Dependencies; npm ci rebuilds them from package-lock.json, which is kept.
+node_modules/
+
+# The stats.nba.com response cache. data/ holds it by default, but
+# NBA_CACHE_DB can put it elsewhere, so SQLite files are ignored anywhere,
+# along with the -wal and -shm files SQLite keeps beside them.
+data/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+
+# Local settings. .env.example is the template bin/setup copies, so it's kept.
+.env
+.env.*
+!.env.example
+
+# Test coverage output and logs.
+coverage/
+*.log
+
+# Editor and OS clutter.
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# Checks the code style and common mistakes with ESLint.
+
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: bin/lint [options] [files...]
+
+Check the code with ESLint: the house style (double quotes, semicolons,
+trailing commas, braces on every if, 2-space indents) and likely
+mistakes like unused variables. With no files, checks the whole project.
+The rules are in eslint.config.js.
+
+Options:
+  -f, --fix              Fix what can be fixed automatically, then report
+                         the rest
+  -h, --help             Show this help and exit
+
+Examples:
+  bin/lint
+  bin/lint --fix
+  bin/lint server.js public/app.js
+EOF
+}
+
+fail() {
+  echo "bin/lint: $1" >&2
+  echo "Run 'bin/lint --help' for usage." >&2
+  exit 1
+}
+
+# eslint.config.js and the paths it names are relative to the project root,
+# so run from there no matter where this is called from.
+cd "$(dirname "$0")/.."
+
+eslint_args=()
+files=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -f|--fix)
+      eslint_args+=(--fix)
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown option '$1'"
+      ;;
+    *)
+      files+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#files[@]} -eq 0 ]]; then
+  files=(.)
+fi
+
+if [[ ! -x node_modules/.bin/eslint ]]; then
+  echo "Installing dependencies..."
+  npm install
+fi
+
+exec node_modules/.bin/eslint "${eslint_args[@]}" "${files[@]}"

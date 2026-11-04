@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# Starts the NBA box scores server.
+
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: bin/server [options]
+
+Start the NBA box scores server.
+
+Options:
+  -p, --port PORT        Port to listen on (default: \$PORT or 3000)
+  -c, --cache-db PATH    SQLite cache file (default: \$NBA_CACHE_DB or
+                         data/nba-cache.sqlite)
+  -w, --watch            Restart automatically when files change
+  -o, --offline          Never ask stats.nba.com; anything not cached
+                         gets an error instead
+  -h, --help             Show this help and exit
+
+Environment variables in .env are loaded if the file exists. Options
+passed on the command line take precedence over .env.
+
+A cache filled by bin/load-fixtures is always served offline, so test
+data never mixes with real games.
+
+Examples:
+  bin/server
+  bin/server --port 4000
+  bin/server --watch --cache-db /tmp/nba-cache.sqlite
+  bin/server --offline
+EOF
+}
+
+fail() {
+  echo "bin/server: $1" >&2
+  echo "Run 'bin/server --help' for usage." >&2
+  exit 1
+}
+
+# Express serves public/ and the cache lives in data/, both relative to
+# the project root, so run from there no matter where this is called from.
+cd "$(dirname "$0")/.."
+
+node_args=(--env-file-if-exists=.env)
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p|--port)
+      [[ $# -ge 2 ]] || fail "$1 requires a value"
+      [[ "$2" =~ ^[0-9]+$ ]] || fail "port must be a number, got '$2'"
+      export PORT="$2"
+      shift 2
+      ;;
+    --port=*)
+      value="${1#*=}"
+      [[ "$value" =~ ^[0-9]+$ ]] || fail "port must be a number, got '$value'"
+      export PORT="$value"
+      shift
+      ;;
+    -c|--cache-db)
+      [[ $# -ge 2 ]] || fail "$1 requires a value"
+      export NBA_CACHE_DB="$2"
+      shift 2
+      ;;
+    --cache-db=*)
+      export NBA_CACHE_DB="${1#*=}"
+      shift
+      ;;
+    -w|--watch)
+      node_args+=(--watch)
+      shift
+      ;;
+    -o|--offline)
+      export NBA_OFFLINE=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown option '$1'"
+      ;;
+  esac
+done
+
+if [[ ! -d node_modules ]]; then
+  echo "Installing dependencies..."
+  npm install
+fi
+
+exec node "${node_args[@]}" server.js

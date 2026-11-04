@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#
+# Runs the test suite with Node's built-in test runner.
+
+set -euo pipefail
+
+usage() {
+  cat <<EOF
+Usage: bin/test [options] [files...]
+
+Run the test suite. With no files, runs every test/**/*.test.js.
+
+Options:
+  -n, --name PATTERN     Only run tests whose name matches PATTERN
+                         (a regular expression; may be repeated)
+  -w, --watch            Rerun tests when files change
+  -c, --coverage         Print a code coverage report after the run
+  -h, --help             Show this help and exit
+
+Tests stub stats.nba.com and use an in-memory cache, so they never touch
+the network or data/nba-cache.sqlite.
+
+Examples:
+  bin/test
+  bin/test test/server.test.js
+  bin/test --name "GET /api/boxscore"
+  bin/test --watch --name cache
+EOF
+}
+
+fail() {
+  echo "bin/test: $1" >&2
+  echo "Run 'bin/test --help' for usage." >&2
+  exit 1
+}
+
+# Test files import from the project root, so run from there no matter
+# where this is called from.
+cd "$(dirname "$0")/.."
+
+node_args=(--test --import ./test/setup.js)
+files=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -n|--name)
+      [[ $# -ge 2 ]] || fail "$1 requires a value"
+      node_args+=(--test-name-pattern "$2")
+      shift 2
+      ;;
+    --name=*)
+      node_args+=(--test-name-pattern "${1#*=}")
+      shift
+      ;;
+    -w|--watch)
+      node_args+=(--watch)
+      shift
+      ;;
+    -c|--coverage)
+      node_args+=(
+        --experimental-test-coverage
+        --test-coverage-include="*.js"
+        --test-coverage-include="nba-api/**/*.js"
+        --test-coverage-include="public/**/*.js"
+      )
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown option '$1'"
+      ;;
+    *)
+      files+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#files[@]} -eq 0 ]]; then
+  files=("test/**/*.test.js")
+fi
+
+if [[ ! -d node_modules ]]; then
+  echo "Installing dependencies..."
+  npm install
+fi
+
+exec node "${node_args[@]}" "${files[@]}"

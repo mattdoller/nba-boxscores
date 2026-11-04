@@ -1,0 +1,27 @@
+# Lints and tests every push and pull request. The tests stub stats.nba.com
+# and use an in-memory cache, so they need no network access or secrets.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The server needs Node 24.2 or newer (see bin/setup).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: bin/lint
+
+      - name: Test
+        run: bin/test
