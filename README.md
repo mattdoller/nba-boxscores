@@ -4,9 +4,9 @@ Pick an NBA team, a season, and a date it played to see that game: the box
 score, every shot on a 3D court, the play-by-play, and how the score moved.
 The data comes from stats.nba.com (the API behind
 [nba_api](https://github.com/swar/nba_api)), and every response is cached in
-SQLite so a game is only ever fetched once.
+SQLite so a game is only ever fetched once.  There's no hosted website because there are some pretty explicit licensing restrictions on the data from the NBA API, and I really just wanted to build a POC and play around with some data visualizations.
 
-![Playing a game back from the middle of the third quarter, with the hot and cold zones switched on partway](images/shot-chart-playback.gif)
+![A tour of the app: a game mid-way through with the hot and cold zones on, the team's card and its zones, then the box scores and a player's card](images/app-tour.gif)
 
 ## What's on a game's page
 
@@ -32,6 +32,8 @@ herringbone.
   Hovering a zone outlines it.
 - **Filters** narrow the court and the play-by-play to any quarter, and to
   any set of players.
+
+![Playing a game back from the middle of the third quarter, with the hot and cold zones switched on partway](images/shot-chart-playback.gif)
 
 ### Scoring runs
 
