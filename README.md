@@ -195,9 +195,11 @@ More ideas and smaller fixes are in [todo.md](todo.md).
 
 ## License and the NBA's data
 
-The code is MIT-licensed; see [LICENSE](LICENSE). `nba-api/` is a port of
-[nba_api](https://github.com/swar/nba_api), also MIT-licensed, whose
-notice is in [nba-api/LICENSE](nba-api/LICENSE).
+The code is MIT-licensed; see [LICENSE](LICENSE). That includes
+`nba-api/`, a JavaScript port of [nba_api](https://github.com/swar/nba_api)
+written for this project. It follows nba_api's design, endpoints, and
+parameters, so nba_api's own MIT notice is included as its license asks,
+in [nba-api/NBA_API_LICENSE](nba-api/NBA_API_LICENSE).
 
 This project isn't affiliated with or endorsed by the NBA. Its data comes
 from stats.nba.com, an unofficial API, and belongs to the NBA; it's meant

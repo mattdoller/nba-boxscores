@@ -1,3 +1,10 @@
+nba-api/ is a JavaScript port of nba_api (https://github.com/swar/nba_api),
+written for this project and covered by the project's LICENSE. It follows
+nba_api's design, endpoints, and parameters, so nba_api's license notice
+is included below, as its MIT license asks.
+
+-------------------------------------------------------------------------
+
 MIT License
 
 Copyright (c) 2018 Swar Patel
