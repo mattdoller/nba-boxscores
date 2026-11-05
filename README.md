@@ -111,7 +111,9 @@ To serve only what's cached from the real cache too, start the server with
   fake games for `bin/load-fixtures`.
 - **`test/`** uses Node's built-in test runner. stats.nba.com is stubbed and
   the cache is in memory, so the tests never touch the network or
-  `data/`. `events.js` is tested in a jsdom page.
+  `data/`. The page is tested in jsdom: the real `index.html` and `app.js`,
+  served by the real server on a small fake season, clicked through like a
+  user would.
 
 stats.nba.com has no published rate limit and sometimes stalls requests that
 come too fast, so failed requests are retried once, and `bin/backfill`

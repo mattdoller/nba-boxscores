@@ -91,6 +91,12 @@ With no files, runs every `test/**/*.test.js` with Node's built-in test
 runner. The tests stub stats.nba.com and use an in-memory cache (set up in
 `test/setup.js`), so they never use the network or touch `data/`.
 
+The `test/public/page-*.test.js` files test the page itself: each loads
+`public/index.html` into jsdom with the real `app.js`, served by the real
+server on a small fake season (`test/public/page.js` sets this up), and
+clicks through it like a user. Each opens one page and its tests run in
+order, so a failure early in a file can fail the tests after it.
+
 ## lint
 
 ```sh

@@ -1,13 +1,14 @@
 // Reading the scoring trend: tooltips for points, runs, and swings, and
 // selecting a stretch of the game by dragging or with the keyboard.
 import { escapeHtml, periodLabel } from "../lib/format.js";
+import { homeWinProb, pctLabel, sideWinProb } from "../lib/winprob.js";
 import { boxscoreEl } from "./dom.js";
 import { gamePeriods } from "./filters.js";
 import { playback } from "./playback.js";
 import { state } from "./state.js";
 import { hideTooltip, showTooltip } from "./tooltip.js";
 import { periodLength, periodStart, runBox, trend, visibleEvents } from "./trend.js";
-import { ballSide, favoredLabel, homeWinProb, pctLabel, possessionAt, showWinProb, sideWinProb } from "./winprob.js";
+import { ballSide, favoredLabel, possessionAt, showWinProb } from "./winprob.js";
 
 // Index of the scoring play nearest an x position on the chart.
 function nearestEvent(x) {
