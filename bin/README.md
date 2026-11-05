@@ -12,6 +12,7 @@ Scripts for setting up, running, checking, and filling the app's data.
 | [`backfill`](#backfill) | Download a whole real season into the cache |
 | [`index`](#index) | Index the cached games for the player cards' season so far |
 | [`load-fixtures`](#load-fixtures) | Make a fake season to try the app on |
+| [`readme-screenshots`](#readme-screenshots) | Take the screenshots in `images/` |
 
 All of them:
 
@@ -282,3 +283,45 @@ and a link to the first game. The server never asks stats.nba.com while
 serving fixtures: anything outside the fake season, like another season or
 a date without a fake game, gets a "Not in the test data" error instead of
 real games.
+
+## readme-screenshots
+
+```sh
+bin/readme-screenshots
+bin/readme-screenshots --team ORL --seed 3
+```
+
+| Option | What it does |
+| --- | --- |
+| `-t`, `--team ABBR` | Team whose last home game is shown (default: `BOS`, for its parquet floor) |
+| `-g`, `--games N` | Fake games per team, 2 to 82 (default: 12, enough for a season so far on the cards) |
+| `-s`, `--seconds N` | How long the shot chart's animation runs, 3 to 60 (default: 15) |
+| `--seed N` | Seed for the made-up data (default: 1) |
+| `-k`, `--keep` | Keep the temporary folder afterwards, to look at it |
+
+Takes the screenshots in `images/`, on made-up data:
+
+| Image | What it shows |
+| --- | --- |
+| `shot-chart.png` | The shot chart and play-by-play |
+| `shot-chart-playback.gif` | The game from the middle of the third quarter, played back at ½×, shots landing at both ends, with a cursor switching on the hot/cold zones partway |
+| `scoring-runs.png` | The scoring trend and its runs |
+| `scoring-runs-playback.gif` | The whole game played back at 4×, the trend drawing as it goes, with a cursor switching on the win probability halfway |
+| `biggest-plays.png` | The game's biggest plays |
+| `player-card.png` | A player's card: season so far, career, and zones |
+| `team-card.png` | The team's card |
+
+It makes a fake season with `bin/load-fixtures`, serves it with the real
+server (offline), opens the team's last home game in headless Chrome, and
+captures each part of the page: still images at twice the screen's
+resolution, and the animations frame by frame, made into GIFs with
+ffmpeg. The cursor in the animations is drawn on the page; the real mouse
+never moves, so only its click does anything. The fake season, the server, and Chrome's profile all live in a
+temporary folder that's deleted at the end, whether or not it succeeds.
+
+- **It needs** Google Chrome or Chromium (or `CHROME` set to one) and
+  ffmpeg.
+- **It takes about a minute**, most of it making the fake season.
+- **The same options make the same fake game**, so rerunning only
+  changes the still images when the app's look does. The animations'
+  frames depend on timing, so they differ a little from run to run.

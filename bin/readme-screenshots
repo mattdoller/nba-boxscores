@@ -1,0 +1,588 @@
+#!/usr/bin/env node
+//
+// Takes the README's screenshots: a fake season served by the real server,
+// opened in headless Chrome, with each part of the page captured to images/.
+
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+const USAGE = `Usage: bin/readme-screenshots [options]
+
+Take the README's screenshots of the app, on made-up data: a fake season
+from bin/load-fixtures, served by the real server and opened in headless
+Chrome. Writes to images/:
+
+  shot-chart.png           the shot chart and play-by-play
+  shot-chart-playback.gif  the game from the middle of the third quarter,
+                           played back at half speed, shots landing at both
+                           ends, with a cursor switching on the hot/cold
+                           zones partway
+  scoring-runs.png         the scoring trend and its runs
+  scoring-runs-playback.gif
+                           the game played back at four times speed, the
+                           trend drawing as it goes, with a cursor
+                           switching on the win probability halfway
+  biggest-plays.png        the game's biggest plays
+  player-card.png          a player's card
+  team-card.png            a team's card
+
+The fake season, the server, and Chrome's profile live in a temporary
+folder that's deleted when it's done, whether or not it succeeds.
+
+Needs Google Chrome or Chromium (or CHROME set to one), and ffmpeg for
+the animation.
+
+Options:
+  -t, --team ABBR        Team whose last home game is shown (default: BOS,
+                         for its parquet floor)
+  -g, --games N          Fake games per team, 2 to 82 (default: 12, enough
+                         for a season so far on the cards)
+  -s, --seconds N        How long the shot chart's animation runs, 3 to 60
+                         (default: 15, about three and a half minutes of
+                         the game at half speed)
+      --seed N           Seed for the made-up data (default: 1)
+  -k, --keep             Keep the temporary folder, for a look afterwards
+  -h, --help             Show this help and exit
+
+Examples:
+  bin/readme-screenshots
+  bin/readme-screenshots --team ORL --seed 3
+`;
+
+// Wide enough for the court and the play-by-play side by side; static
+// images at twice that, for sharp text on high-density screens.
+const WIDTH = 1400;
+const HEIGHT = 1000;
+const SCALE = 2;
+
+// The animation: frames a second, and how wide it's scaled to, which keeps
+// the file a reasonable size.
+const GIF_FPS = 15;
+const GIF_WIDTH = 900;
+
+
+function fail(message) {
+  console.error(`bin/readme-screenshots: ${message}`);
+  console.error("Run 'bin/readme-screenshots --help' for usage.");
+  process.exit(1);
+}
+
+let args;
+try {
+  ({ values: args } = parseArgs({
+    options: {
+      team: { type: "string", short: "t", default: "BOS" },
+      games: { type: "string", short: "g", default: "12" },
+      seconds: { type: "string", short: "s", default: "15" },
+      seed: { type: "string", default: "1" },
+      keep: { type: "boolean", short: "k" },
+      help: { type: "boolean", short: "h" },
+    },
+  }));
+} catch (err) {
+  fail(err.message);
+}
+
+if (args.help) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+
+const gamesPerTeam = Number(args.games);
+if (!Number.isInteger(gamesPerTeam) || gamesPerTeam < 2 || gamesPerTeam > 82) {
+  fail(`games must be a whole number from 2 to 82, got '${args.games}'`);
+}
+const recordSeconds = Number(args.seconds);
+if (!Number.isFinite(recordSeconds) || recordSeconds < 3 || recordSeconds > 60) {
+  fail(`seconds must be a number from 3 to 60, got '${args.seconds}'`);
+}
+const team = args.team.toUpperCase();
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const out = join(root, "images");
+
+function findChrome() {
+  const candidates = [process.env.CHROME, "google-chrome", "google-chrome-stable", "chromium", "chromium-browser"];
+  for (const name of candidates.filter(Boolean)) {
+    if (spawnSync(name, ["--version"]).status === 0) {
+      return name;
+    }
+  }
+  return null;
+}
+
+const chromePath = findChrome();
+if (!chromePath) {
+  fail("couldn't find Chrome or Chromium; install one, or set CHROME to its path");
+}
+if (spawnSync("ffmpeg", ["-version"]).status !== 0) {
+  fail("couldn't find ffmpeg, which makes the animation; install it first");
+}
+
+// A free port for the server.
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = createServer().listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    }).on("error", reject);
+  });
+}
+
+// Runs a command to completion, failing on a non-zero exit.
+function run(command, commandArgs, options = {}) {
+  const result = spawnSync(command, commandArgs, { stdio: ["ignore", "pipe", "pipe"], ...options });
+  if (result.status !== 0) {
+    throw new Error(`${command} failed:\n${result.stderr?.toString() || result.stdout?.toString()}`);
+  }
+  return result.stdout?.toString() ?? "";
+}
+
+// Starts a child process and resolves once a line of its output matches.
+function startUntil(command, commandArgs, ready, options) {
+  const child = spawn(command, commandArgs, { stdio: ["ignore", "pipe", "pipe"], ...options });
+  return new Promise((resolve, reject) => {
+    let output = "";
+    const onData = (data) => {
+      output += data;
+      if (ready.test(output)) {
+        resolve(child);
+      }
+    };
+    child.stdout.on("data", onData);
+    child.stderr.on("data", onData);
+    child.on("exit", (code) => reject(new Error(`${command} exited (${code}) before it was ready:\n${output}`)));
+  });
+}
+
+// The DevTools protocol over Chrome's WebSocket: send(method, params)
+// resolves with the result, and on(event, handler) listens for events.
+async function connect(url) {
+  const ws = new WebSocket(url);
+  await new Promise((resolve, reject) => {
+    ws.addEventListener("open", resolve, { once: true });
+    ws.addEventListener("error", reject, { once: true });
+  });
+  let id = 0;
+  const pending = new Map();
+  const listeners = new Map();
+  ws.addEventListener("message", (event) => {
+    const message = JSON.parse(event.data);
+    if (message.id && pending.has(message.id)) {
+      const { resolve, reject } = pending.get(message.id);
+      pending.delete(message.id);
+      if (message.error) {
+        reject(new Error(`${message.error.message} (${message.error.code})`));
+      } else {
+        resolve(message.result);
+      }
+    } else if (message.method) {
+      for (const handler of listeners.get(message.method) ?? []) {
+        handler(message.params);
+      }
+    }
+  });
+  return {
+    send(method, params = {}) {
+      return new Promise((resolve, reject) => {
+        pending.set(++id, { resolve, reject });
+        ws.send(JSON.stringify({ id, method, params }));
+      });
+    },
+    on(method, handler) {
+      listeners.set(method, [...(listeners.get(method) ?? []), handler]);
+    },
+    close() {
+      ws.close();
+    },
+  };
+}
+
+// Where the shot chart's animation starts: halfway through the third
+// quarter, in seconds since tip-off.
+const MID_THIRD_SECONDS = 2 * 720 + 360;
+
+// The longest the scoring runs' playback is recorded, in case it never says
+// it's done.
+const MAX_PLAYBACK_MS = 60_000;
+
+// A cursor drawn over the page for the animations: __cursor.click(selector)
+// glides it in to an element, shows a click there, clicks it, and fades it
+// out. It's only a picture; the real mouse never moves, so nothing on the
+// page reacts to it but the click itself. playbackShare() is how far the
+// playback has got, from the quarter tabs' clock (0 to 1), for timing it.
+const CURSOR = `(() => {
+  if (window.__cursor) {
+    return;
+  }
+  const arrow = document.createElement("div");
+  // Drawn at 42px, so it's still easy to see once the GIF is scaled down;
+  // its tip is at (7, 4).
+  arrow.innerHTML = '<svg width="42" height="42" viewBox="0 0 30 30"><path d="M5 3 L5 24 L10.5 19 L14.5 27.5 L18.5 25.8 L14.6 17.5 L22 17.5 Z" fill="#111" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  Object.assign(arrow.style, {
+    position: "fixed", left: "0", top: "0", zIndex: "2147483647", pointerEvents: "none",
+    opacity: "0", transformOrigin: "7px 4px",
+  });
+  document.body.append(arrow);
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const place = (x, y, scale = 1) => {
+    arrow.style.transform = "translate(" + (x - 7) + "px, " + (y - 4) + "px) scale(" + scale + ")";
+  };
+  window.__cursor = {
+    async click(selector) {
+      const target = document.querySelector(selector);
+      const r = target.getBoundingClientRect();
+      const x = r.x + r.width / 2;
+      const y = r.y + r.height / 2;
+      // In from below and to the left, where the page is quiet.
+      arrow.style.transition = "none";
+      place(x - 170, y + 110);
+      arrow.getBoundingClientRect();
+      arrow.style.transition = "transform 0.9s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.25s";
+      arrow.style.opacity = "1";
+      place(x, y);
+      await wait(1100);
+      // The press: the arrow dips, a ring spreads from the spot, and the
+      // checkbox takes the click.
+      arrow.style.transition = "transform 0.12s, opacity 0.25s";
+      place(x, y, 0.82);
+      const ring = document.createElement("div");
+      Object.assign(ring.style, {
+        position: "fixed", left: (x - 18) + "px", top: (y - 18) + "px", width: "36px", height: "36px",
+        borderRadius: "50%", border: "3px solid #fa5252", zIndex: "2147483646", pointerEvents: "none",
+      });
+      document.body.append(ring);
+      ring.animate([{ transform: "scale(0.3)", opacity: 1 }, { transform: "scale(1.6)", opacity: 0 }], { duration: 650, easing: "ease-out" })
+        .finished.then(() => ring.remove());
+      await wait(120);
+      target.click();
+      place(x, y);
+      await wait(900);
+      arrow.style.transition = "transform 0.6s ease-in, opacity 0.6s";
+      arrow.style.opacity = "0";
+      place(x + 60, y + 50);
+    },
+  };
+  window.playbackShare = () => {
+    const periods = document.querySelectorAll("#periodTabs button:not([data-period=all])").length;
+    const match = /^(Q|OT)(\\d+) · (\\d+):(\\d+)$/.exec(document.getElementById("playClock").textContent);
+    if (!match || periods === 0) {
+      return 0;
+    }
+    const period = match[1] === "Q" ? Number(match[2]) : 4 + Number(match[2]);
+    const left = Number(match[3]) * 60 + Number(match[4]);
+    return (period - 1 + 1 - left / (period > 4 ? 300 : 720)) / periods;
+  };
+})()`;
+
+// Writes recorded frames as a GIF, cropped to `region` (in screen pixels):
+// each frame shown until the next one, as ffmpeg's concat list says.
+function encodeGif(frames, region, name) {
+  const frameDir = mkdtempSync(join(work, "frames-"));
+  const list = frames.map((frame, i) => {
+    const file = join(frameDir, `${String(i).padStart(5, "0")}.png`);
+    writeFileSync(file, Buffer.from(frame.data, "base64"));
+    const duration = i + 1 < frames.length ? frames[i + 1].time - frame.time : 1;
+    return `file '${file}'\nduration ${duration.toFixed(3)}`;
+  });
+  // The last frame once more, so its duration is honored.
+  list.push(`file '${join(frameDir, `${String(frames.length - 1).padStart(5, "0")}.png`)}'`);
+  writeFileSync(join(frameDir, "frames.txt"), list.join("\n"));
+  const crop = `crop=${Math.round(region.width)}:${Math.round(region.height)}:${Math.round(region.x)}:${Math.round(region.y)}`;
+  run("ffmpeg", [
+    "-y", "-loglevel", "error",
+    "-f", "concat", "-safe", "0", "-i", join(frameDir, "frames.txt"),
+    "-vf", `${crop},fps=${GIF_FPS},scale=${GIF_WIDTH}:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
+    "-loop", "0",
+    join(out, name),
+  ]);
+}
+
+const work = mkdtempSync(join(tmpdir(), "readme-screenshots-"));
+const children = [];
+
+async function main() {
+  // 1. A fake season, in a cache of its own.
+  const cacheDb = join(work, "fixtures.sqlite");
+  console.log(`Making ${gamesPerTeam} fake games per team...`);
+  run(process.execPath, [join(root, "bin/load-fixtures"), "--cache-db", cacheDb, "--games", String(gamesPerTeam), "--seed", args.seed], { cwd: root });
+
+  // 2. The server, offline on it.
+  const port = await freePort();
+  const base = `http://127.0.0.1:${port}`;
+  children.push(await startUntil(process.execPath, ["server.js"], /running at/, {
+    cwd: root,
+    env: { ...process.env, PORT: String(port), NBA_CACHE_DB: cacheDb, NBA_OFFLINE: "1" },
+  }));
+
+  // The team's last home game, so the cards have a season so far behind it.
+  const getJson = async (path) => (await fetch(`${base}${path}`)).json();
+  const teams = await getJson("/api/teams");
+  const picked = teams.find((t) => t.abbreviation === team);
+  if (!picked) {
+    throw new Error(`${team} isn't a team; use an abbreviation like BOS`);
+  }
+  const { seasons } = await getJson("/api/info");
+  const season = seasons?.[0];
+  const games = await getJson(`/api/games?team_id=${picked.id}&season=${season}`);
+  const home = games.filter((g) => g.matchup.includes(" vs. "));
+  const game = home.at(-1) ?? games.at(-1);
+  if (!game) {
+    throw new Error(`${team} has no games in the fake season`);
+  }
+
+  // 3. Chrome, headless, with a profile of its own.
+  const profile = join(work, "chrome");
+  children.push(spawn(chromePath, [
+    "--headless=new",
+    "--disable-gpu",
+    "--hide-scrollbars",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--remote-debugging-port=0",
+    `--user-data-dir=${profile}`,
+    "about:blank",
+  ], { stdio: "ignore" }));
+  const portFile = join(profile, "DevToolsActivePort");
+  for (let i = 0; i < 100 && !existsSync(portFile); i++) {
+    await sleep(100);
+  }
+  if (!existsSync(portFile)) {
+    throw new Error("Chrome didn't start");
+  }
+  const devtoolsPort = readFileSync(portFile, "utf8").split("\n")[0];
+  const targets = await (await fetch(`http://127.0.0.1:${devtoolsPort}/json`)).json();
+  const cdp = await connect(targets.find((t) => t.type === "page").webSocketDebuggerUrl);
+
+  const errors = [];
+  await cdp.send("Runtime.enable");
+  cdp.on("Runtime.exceptionThrown", ({ exceptionDetails }) => errors.push(exceptionDetails.exception?.description ?? exceptionDetails.text));
+  await cdp.send("Page.enable");
+  await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }, { name: "prefers-reduced-motion", value: "no-preference" }] });
+
+  const viewport = (height, scale) => cdp.send("Emulation.setDeviceMetricsOverride", { width: WIDTH, height, deviceScaleFactor: scale, mobile: false });
+  const evaluate = async (expression) => {
+    const { result, exceptionDetails } = await cdp.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+    if (exceptionDetails) {
+      throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text);
+    }
+    return result.value;
+  };
+  const waitFor = async (expression, what, timeoutMs = 15_000) => {
+    const start = Date.now();
+    while (!(await evaluate(expression))) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(`Timed out waiting for ${what}`);
+      }
+      await sleep(100);
+    }
+  };
+  // Waits for the page's requests to finish, and for it to draw what they
+  // brought.
+  const settle = async () => {
+    await waitFor("!document.getElementById('apiActivity').classList.contains('active')", "requests to finish");
+    await sleep(400);
+  };
+  // An element's box in the page, for a clip.
+  const box = (selector) => evaluate(`(() => {
+    const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height };
+  })()`);
+  const capture = async (name, selector, { pad = 0 } = {}) => {
+    const r = await box(selector);
+    const clip = { x: Math.max(0, r.x - pad), y: Math.max(0, r.y - pad), width: r.width + pad * 2, height: r.height + pad * 2, scale: 1 };
+    const { data } = await cdp.send("Page.captureScreenshot", { format: "png", clip, captureBeyondViewport: true });
+    writeFileSync(join(out, name), Buffer.from(data, "base64"));
+    console.log(`  images/${name}`);
+  };
+  const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+
+  mkdirSync(out, { recursive: true });
+  await viewport(HEIGHT, SCALE);
+  const url = `${base}/#team=${team}&season=${season}&date=${game.date}`;
+  await cdp.send("Page.navigate", { url });
+  await waitFor("Boolean(document.querySelector('.shotchart .shot') && document.querySelector('.big-plays') && document.querySelector('.trend svg'))", "the game");
+  await settle();
+  console.log(`Capturing ${team}'s game on ${game.date}:`);
+
+  // 4. The static images, from the top of the page so the sticky
+  // scoreboard and quarter bar stay put above them.
+  await evaluate("scrollTo(0, 0)");
+  await capture("shot-chart.png", "#shotchartsSection", { pad: 8 });
+  await capture("scoring-runs.png", '[data-section="scoretrend"]', { pad: 8 });
+  await capture("biggest-plays.png", '[data-section="bigplays"]', { pad: 8 });
+
+  // The cards, in a viewport tall enough for each to show whole: the top
+  // scorer among the team's players with a few seasons behind them, and
+  // the team.
+  await viewport(2600, SCALE);
+  const player = await evaluate(`(async () => {
+    const links = [...document.querySelectorAll('.team-stats[data-team="${picked.id}"] .player-link')];
+    for (const link of links) {
+      const data = await (await fetch('/api/player?player_id=' + link.dataset.player)).json();
+      if (data.seasons?.length >= 3) {
+        return link.dataset.player;
+      }
+    }
+    return links[0]?.dataset.player;
+  })()`);
+  await click(`.player-link[data-player="${player}"]`);
+  await waitFor("Boolean(document.querySelector('#playerDialog .season-game-log') && document.querySelector('#playerDialog .career td[style]') && !/Loading/.test(document.querySelector('#playerDialog .card-zones').textContent))", "the player card");
+  await settle();
+  await capture("player-card.png", "#playerDialog");
+  // Closing a card goes back in the history a moment later; the next card
+  // waits for that, so the Back doesn't close it.
+  await click("#playerDialog .player-card-close");
+  await waitFor("!location.hash.includes('card=')", "the player card to close");
+  await settle();
+
+  await click(`.team-link[data-team="${picked.id}"]`);
+  await waitFor("Boolean(document.querySelector('.team-game-log') && document.querySelector('.team-history-table') && document.querySelector('#teamDialog .card-court .zone'))", "the team card");
+  await settle();
+  await capture("team-card.png", "#teamDialog");
+  await click("#teamDialog .player-card-close");
+  await waitFor("!location.hash.includes('card=')", "the team card to close");
+  await settle();
+
+  // 5. The animations, each recorded frame by frame while the game plays
+  // back, with a cursor clicking a checkbox partway through to show what it
+  // does, and made into a GIF.
+  await viewport(HEIGHT, 1);
+  let frames = [];
+  cdp.on("Page.screencastFrame", ({ data, metadata, sessionId }) => {
+    frames.push({ data, time: metadata.timestamp });
+    cdp.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
+  });
+
+  // A part of the page as the screen shows it (the screencast only has
+  // what's on screen).
+  const onScreen = (selector) => evaluate(`(() => {
+    const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  })()`);
+  const setSpeed = async (label) => {
+    for (let i = 0; i < 4 && (await evaluate("document.getElementById('speedButton').textContent")) !== label; i++) {
+      await click("#speedButton");
+    }
+  };
+
+  // Records the screen while `during` runs, then crops it to `region` and
+  // writes it as a GIF.
+  const record = async (name, region, during) => {
+    frames = [];
+    await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
+    await sleep(300);
+    await during();
+    await cdp.send("Page.stopScreencast");
+    if (frames.length < 2) {
+      throw new Error(`${name} recorded no frames`);
+    }
+    encodeGif(frames, region, name);
+    console.log(`  images/${name} (${frames.length} frames)`);
+  };
+
+  // Each animation starts from a fresh page.
+  const reopen = async () => {
+    await cdp.send("Page.navigate", { url: "about:blank" });
+    await sleep(200);
+    await cdp.send("Page.navigate", { url });
+  };
+
+  // The shot chart: from the middle of the third quarter at half speed,
+  // shots landing at both ends, with hot and cold zones switched on partway,
+  // when there are enough shots behind them to shade.
+  await reopen();
+  await waitFor("Boolean(document.querySelector('.shotchart .shot') && document.querySelector('#playbyplay tr[data-play]'))", "the game");
+  await settle();
+  await evaluate("scrollTo(0, 0)");
+  await setSpeed("½×");
+  if (await evaluate("document.getElementById('zonesToggle').checked")) {
+    await click("#zonesToggle");
+  }
+  // Clicking a shot in the play-by-play puts the court at that moment, with
+  // every shot before it on the floor, paused; Play carries on from there.
+  // The shot nearest the third quarter's halfway point, 30 minutes in.
+  const midThird = await evaluate(`(() => {
+    const marks = [...document.querySelectorAll("#shotcharts .shot[data-play]")];
+    const mark = marks.reduce((best, m) => (Math.abs(m.dataset.t - ${MID_THIRD_SECONDS}) < Math.abs(best.dataset.t - ${MID_THIRD_SECONDS}) ? m : best));
+    return mark.dataset.play;
+  })()`);
+  await click(`#playbyplay tr[data-play="${midThird}"] .play`);
+  await waitFor("/^Q3/.test(document.getElementById('playClock').textContent)", "the court to jump to the third quarter");
+  await sleep(1500);
+  // The play-by-play folded away, so the court has the whole width and its
+  // captions (which name each shooter as they shoot) stay on one line,
+  // rather than wrapping and moving the court under the crop.
+  if (!(await evaluate("document.getElementById('playbyplay').hidden"))) {
+    await click("#pbpToggle");
+    await sleep(400);
+  }
+  await evaluate(CURSOR);
+  const court = await onScreen("#shotcharts .shotchart");
+  await record("shot-chart-playback.gif", court, async () => {
+    await click("#playButton");
+    await sleep(recordSeconds * 1000 * 0.4);
+    await evaluate("__cursor.click('#zonesToggle')");
+    await sleep(recordSeconds * 1000 * 0.6);
+  });
+
+  // The scoring runs: the whole game at four times speed, the lines drawing
+  // as it goes, with the win probability line switched on halfway.
+  await reopen();
+  await waitFor("Boolean(document.querySelector('.trend svg .trend-line'))", "the game");
+  await settle();
+  await setSpeed("4×");
+  if (await evaluate("document.getElementById('winProbToggle').checked")) {
+    await click("#winProbToggle");
+    await settle();
+  }
+  // At the bottom of the screen, clear of the scoreboard and quarter bar
+  // pinned at the top.
+  await evaluate("document.querySelector('[data-section=\"scoretrend\"]').scrollIntoView({ block: 'end' })");
+  await sleep(400);
+  await evaluate(CURSOR);
+  const trend = await onScreen('[data-section="scoretrend"]');
+  await record("scoring-runs-playback.gif", trend, async () => {
+    await click("#playButton");
+    const started = Date.now();
+    let clicked = false;
+    while (!/Replay/.test(await evaluate("document.getElementById('playButton').textContent")) && Date.now() - started < MAX_PLAYBACK_MS) {
+      if (!clicked && (await evaluate("playbackShare()")) >= 0.45) {
+        clicked = true;
+        await evaluate("__cursor.click('#winProbToggle')");
+      }
+      await sleep(100);
+    }
+    // Hold on the finished chart for a moment.
+    await sleep(1500);
+  });
+  cdp.close();
+
+  if (errors.length > 0) {
+    throw new Error(`The page raised errors:\n${errors.join("\n")}`);
+  }
+}
+
+try {
+  await main();
+} catch (err) {
+  console.error(`bin/readme-screenshots: ${err.message}`);
+  process.exitCode = 1;
+} finally {
+  for (const child of children) {
+    child.kill();
+  }
+  // Chrome holds its profile open briefly as it quits.
+  await sleep(500);
+  if (args.keep) {
+    console.log(`Kept the fake season and Chrome's profile in ${work}`);
+  } else {
+    rmSync(work, { recursive: true, force: true });
+  }
+}
