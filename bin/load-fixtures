@@ -97,7 +97,7 @@ if (args.reset) {
 process.env.NBA_CACHE_DB = dbPath;
 
 const { SeasonType, getTeams, seasonString, teamGameLog } = await import("../nba-api/index.js");
-const { cacheGame, cachePlayer } = await import("../server.js");
+const { cacheGame, cachePlayer, cacheTeam } = await import("../server.js");
 const { currentSeason } = await import("../public/lib/format.js");
 const { fakeSeason } = await import("../dev/fake-season.js");
 const { markFixtures } = await import("../nba-api/cache.js");
@@ -124,6 +124,8 @@ globalThis.fetch = async (input) => {
     if (params.get("SeasonType") === SeasonType.regular) {
       body = fake.teamgamelog.get(Number(params.get("TeamID")));
     }
+  } else if (endpoint === "leaguegamelog") {
+    body = fake.leagueGameLog.get(Number(params.get("Season").slice(0, 4)));
   } else if (endpoint === "leaguedashteamstats") {
     body = fake.league.get(Number(params.get("Season").slice(0, 4)));
   } else if (endpoint === "playercareerstats") {
@@ -132,6 +134,9 @@ globalThis.fetch = async (input) => {
     // A player's whole season, rather than one game's shots.
     const season = Number(params.get("Season").slice(0, 4));
     body = fake.players.get(Number(params.get("PlayerID")))?.shotCharts.get(season);
+  } else if (endpoint === "shotchartdetail" && !params.get("GameID")) {
+    // A team's whole season.
+    body = fake.teamShotCharts.get(Number(params.get("TeamID")));
   } else {
     body = fake.byGame.get(params.get("GameID"))?.[endpoint];
   }
@@ -151,6 +156,9 @@ for (const gameId of fake.byGame.keys()) {
 }
 for (const playerId of fake.players.keys()) {
   await cachePlayer(playerId);
+}
+for (const team of getTeams()) {
+  await cacheTeam(team.id, season);
 }
 // The app shows a notice that the data is made up when the cache says so.
 markFixtures();

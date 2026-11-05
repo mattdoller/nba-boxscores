@@ -28,8 +28,20 @@ SQLite so a game is only ever fetched once.
   away, and each stat shaded against the league that season. Below it are
   their hot/cold zones for any season from 1996–97 on, on a half court seen
   from above.
+- **Team cards**: clicking a team's name on the scoreboard opens its
+  regular season: its record (and where it stood after the game on
+  screen), each stat ranked against the other 29 teams and shaded against
+  the league, every game it has played (click one to open it), and its
+  hot/cold zones.
+- **Card tables** sort by any column, like the box scores: a player's
+  career, a team's season stats (by rank, say), and either card's zones.
+  Each table remembers its sort.
 
-The game on screen is in the URL, so any view can be bookmarked or shared.
+The game on screen is in the URL, so any view can be bookmarked or shared,
+along with its quarter, players, and any card open over it (and the season
+of zones a player card shows). Opening a card adds it to the browser's
+history, so Back closes it. Coming back without a link reopens the last
+game, but not a card left open on it.
 Settings (light or dark, collapsed panels, toggles, playback speed, sorts)
 are remembered in the browser.
 
@@ -95,7 +107,7 @@ To serve only what's cached from the real cache too, start the server with
 - **`server.js`** is an Express app serving `public/` and a small JSON API
   (`/api/teams`, `/api/games`, `/api/boxscore`, `/api/playbyplay`,
   `/api/shotchart`, `/api/shotzones`, `/api/player`, `/api/playerzones`,
-  `/api/league`, `/api/info`). A player card gets the league totals for its
+  `/api/team`, `/api/teamzones`, `/api/league`, `/api/info`). A player card gets the league totals for its
   whole career from `/api/league` in one request.
 - **`nba-api/`** is a JavaScript port of the parts of nba_api this app uses:
   the stats.nba.com endpoints, their parameters, and the headers the site

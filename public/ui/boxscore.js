@@ -85,13 +85,13 @@ export function renderBoxScore(game, stats) {
     <header class="scoreboard">
       <div class="team ${away.score > home.score ? "winner" : ""}">
         <span class="abbr">${escapeHtml(away.abbreviation)}</span>
-        <span class="name">${escapeHtml(away.full_name)}</span>
+        <button type="button" class="name team-link" data-team="${away.id}" title="Open the team's season">${escapeHtml(away.full_name)}</button>
         <span class="score" data-team="${away.id}" style="${scoreColorStyle(away)}">${escapeHtml(away.score)}</span>
       </div>
       <div class="at">@</div>
       <div class="team ${home.score > away.score ? "winner" : ""}">
         <span class="abbr">${escapeHtml(home.abbreviation)}</span>
-        <span class="name">${escapeHtml(home.full_name)}</span>
+        <button type="button" class="name team-link" data-team="${home.id}" title="Open the team's season">${escapeHtml(home.full_name)}</button>
         <span class="score" data-team="${home.id}" style="${scoreColorStyle(home)}">${escapeHtml(home.score)}</span>
       </div>
       <p class="meta">

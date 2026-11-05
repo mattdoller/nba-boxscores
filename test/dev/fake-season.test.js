@@ -131,4 +131,31 @@ describe("fakeSeason", () => {
     assert.ok(team.MIN >= team.GP * 48);
     assert.deepEqual([...season.league.keys()], [2025, 2024, 2023, 2022, 2021]);
   });
+
+  it("gives the league a game log with each team's side of every game", () => {
+    const log = rows(season.leagueGameLog.get(2025), "LeagueGameLog");
+
+    assert.equal(log.length, games.length * 2);
+    assert.deepEqual(log.map((row) => row.GAME_DATE), log.map((row) => row.GAME_DATE).sort());
+    for (const [id, g] of games) {
+      const [home, away] = [g.home, g.away].map((abbr) => log.find((row) => row.GAME_ID === id && row.TEAM_ABBREVIATION === abbr));
+      assert.equal(home.MATCHUP, `${g.home} vs. ${g.away}`);
+      assert.equal(away.MATCHUP, `${g.away} @ ${g.home}`);
+      assert.deepEqual([home.PTS, away.PTS], [g.score.home, g.score.away]);
+      assert.equal(home.PLUS_MINUS, -away.PLUS_MINUS);
+      assert.equal(home.WL === "W", g.score.home > g.score.away);
+    }
+  });
+
+  it("gives every team a season shot chart of its games' shots", () => {
+    const team = getTeams()[0];
+    const chart = season.teamShotCharts.get(team.id);
+    const shots = rows(chart, "Shot_Chart_Detail");
+    const fromGames = games.flatMap(([, g]) => rows(g.shotchartdetail, "Shot_Chart_Detail")).filter((shot) => shot.TEAM_ID === team.id);
+
+    assert.equal(shots.length, fromGames.length);
+    assert.ok(shots.every((shot) => shot.TEAM_ID === team.id));
+    assert.ok(rows(chart, "LeagueAverages").length > 0);
+    assert.equal(season.teamShotCharts.size, getTeams().length);
+  });
 });

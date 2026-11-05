@@ -1,16 +1,16 @@
 // The player card: a modal over the game with a player's career, shaded
 // against the league, and their hot/cold zones by season.
-import { escapeHtml, round1 } from "../lib/format.js";
+import { escapeHtml } from "../lib/format.js";
 import { loadPref, savePref } from "../lib/prefs.js";
-import { ZONE_CLIPS, ZONE_LABEL_SPOTS, ZONE_LAYERS, ZONE_NAMES, zoneComparison } from "../lib/zones.js";
 import { getJson } from "./api.js";
 import { currentStats } from "./boxscore.js";
+import { applyCardSorts, cardSortClick, sortHeader } from "./cardsort.js";
+import { percent, seasonLabel, shadeAttrs, zonesBody } from "./cardzones.js";
 import { seasonSelect } from "./dom.js";
-import { HALF_COURT_LINES } from "./floor.js";
+import { writeHash } from "./hash.js";
 import { teamById } from "./playback.js";
 import { state } from "./state.js";
 import { hideTooltip } from "./tooltip.js";
-import { outlineZone, zoneFill } from "./zones.js";
 
 // The player card: a modal over the game with a player's regular-season
 // career, and their hot/cold zones for any season with shot data, on a
@@ -25,17 +25,6 @@ function perGame(total, games) {
     return "–";
   }
   return (total / games).toFixed(1);
-}
-
-function percent(made, attempts) {
-  if (!attempts) {
-    return "–";
-  }
-  return ((made / attempts) * 100).toFixed(1);
-}
-
-function seasonLabel(season) {
-  return `${season}–${String(season + 1).slice(2)}`;
 }
 
 // How the career table counts: "perGame" averages or season "totals", and
@@ -165,7 +154,7 @@ function careerBaseline() {
 
 // A cell's shade and tooltip against the baseline, as attributes; empty
 // when it isn't compared.
-function shadeAttrs(column, t, baseline) {
+function cellShade(column, t, baseline) {
   if (!cardShading || !baseline || !(column.rate || column.share) || t.min < SHADE_MIN_MINUTES) {
     return "";
   }
@@ -197,11 +186,7 @@ function shadeAttrs(column, t, baseline) {
   if (column.worse) {
     better = !better;
   }
-  let color = "var(--zone-cold)";
-  if (better) {
-    color = "var(--zone-hot)";
-  }
-  return ` style="background: color-mix(in srgb, ${color} ${Math.round(6 + 34 * strength)}%, var(--panel))" title="${escapeHtml(title)}"`;
+  return shadeAttrs(better, strength, title);
 }
 
 function careerColumns() {
@@ -222,7 +207,7 @@ function careerRow(label, team, age, t, season, baseline) {
       <th>${escapeHtml(label)}</th>
       <td class="text">${escapeHtml(team)}</td>
       <td>${escapeHtml(age ?? "")}</td>
-      ${careerColumns().map((column) => `<td${shadeAttrs(column, t, baseline)}>${escapeHtml(column.value(t))}</td>`).join("")}
+      ${careerColumns().map((column) => `<td${cellShade(column, t, baseline)}>${escapeHtml(column.value(t))}</td>`).join("")}
     </tr>`;
 }
 
@@ -278,9 +263,7 @@ function careerTable() {
   if (career?.career) {
     totals = `<tfoot>${careerRow("Career", "", null, career.career, null, careerBaseline())}</tfoot>`;
   }
-  const headers = columns
-    .map((column) => `<th${column.title ? ` title="${escapeHtml(column.title)}"` : ""}>${column.label}</th>`)
-    .join("");
+  const headers = columns.map((column) => sortHeader(column.label, { title: column.title })).join("");
   let note = "Per game";
   if (cardMode === "totals") {
     note = "Season totals";
@@ -291,9 +274,9 @@ function careerTable() {
   }
   return `
     <div class="table-wrap">
-      <table class="stats career">
+      <table class="stats career" data-sort-table="career">
         <thead>
-          <tr><th>Season</th><th class="text">Team</th><th>Age</th>${headers}</tr>
+          <tr>${sortHeader("Season", { ascending: true })}${sortHeader("Team", { text: true })}${sortHeader("Age", { ascending: true })}${headers}</tr>
         </thead>
         <tbody>${rows}</tbody>
         ${totals}
@@ -310,86 +293,6 @@ function zoneSeasons() {
     .reverse();
 }
 
-function flatPath(points, close = true) {
-  const d = points.map(([x, y], i) => `${i === 0 ? "M" : "L"} ${round1(x)} ${round1(y)}`).join(" ");
-  if (close) {
-    return `${d} Z`;
-  }
-  return d;
-}
-
-// A half court seen from above, hoop at the top: hoop coordinates drawn as
-// they are, x across and y toward half court (down the screen).
-function playerZonesCourt(data) {
-  const clips = Object.entries(ZONE_CLIPS)
-    .map(([name, points]) => `<clipPath id="card-clip-${name}"><path d="${flatPath(points)}" /></clipPath>`)
-    .join("");
-  const zones = ZONE_LAYERS.map(({ zone, points, clip }) => {
-    let clipPath = "";
-    if (clip) {
-      clipPath = ` clip-path="url(#card-clip-${clip})"`;
-    }
-    return `<path class="zone" data-zone="${escapeHtml(zone)}" d="${flatPath(points)}"${clipPath} style="${zoneFill(data.zones[zone], data.league[zone])}" />`;
-  }).join("");
-  const lines = HALF_COURT_LINES.map(({ points, dashed, kind }) =>
-    `<path class="court-line${dashed ? " dashed" : ""}${kind ? ` ${kind}` : ""}" d="${flatPath(points, false)}" />`).join("");
-  const labels = Object.entries(ZONE_LABEL_SPOTS).map(([zone, [x, y]]) => {
-    const team = data.zones[zone];
-    if (!team?.fga) {
-      return `<text class="zone-label empty" x="${x}" y="${y}">–</text>`;
-    }
-    return `
-      <text class="zone-label" x="${x}" y="${y}">${Math.round((team.fgm / team.fga) * 100)}%</text>
-      <text class="zone-count" x="${x}" y="${y + 15}">${team.fgm}/${team.fga}</text>`;
-  }).join("");
-  return `
-    <svg class="card-court" viewBox="-260 -60 520 492" role="img"
-      aria-label="${escapeHtml(`${state.playerCard.name}'s shooting by zone`)}">
-      <rect class="court-floor" x="-250" y="-47.5" width="500" height="470" />
-      ${clips}
-      ${zones}
-      ${lines}
-      <g class="zone-outline" aria-hidden="true"></g>
-      <path class="backboard-line" d="M -30 -7.5 L 30 -7.5" />
-      <circle class="rim" cx="0" cy="0" r="7.5" />
-      ${labels}
-    </svg>`;
-}
-
-// The zones as a list: the player's shooting against the league's.
-function playerZonesList(data) {
-  const rows = Object.keys(ZONE_NAMES).map((zone) => {
-    const team = data.zones[zone];
-    const league = data.league[zone];
-    const comparison = zoneComparison(team, league);
-    let diff = "";
-    let tone = "";
-    if (comparison) {
-      const points = comparison.diff * 100;
-      diff = `${points >= 0 ? "+" : ""}${points.toFixed(1)}`;
-      tone = points >= 0 ? "hot" : "cold";
-    }
-    return `
-      <tr data-zone="${escapeHtml(zone)}">
-        <th>${escapeHtml(ZONE_NAMES[zone])}</th>
-        <td>${team ? `${team.fgm}/${team.fga}` : "–"}</td>
-        <td>${team ? percent(team.fgm, team.fga) : "–"}</td>
-        <td>${league ? percent(league.fgm, league.fga) : "–"}</td>
-        <td class="${tone}">${diff}</td>
-      </tr>`;
-  }).join("");
-  return `
-    <div class="table-wrap">
-      <table class="stats zone-list">
-        <thead><tr><th>Zone</th><th>FG</th><th>FG%</th><th>League</th><th>+/-</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-}
-
-// No shots anywhere: the court and list drawn empty while a season loads.
-const NO_ZONES = { zones: {}, league: {} };
-
 function playerZonesSection() {
   const { career, error } = state.playerCard;
   if (error) {
@@ -400,9 +303,6 @@ function playerZonesSection() {
     return '<p class="hint">No shot data: it starts with the 1996–97 season.</p>';
   }
 
-  // The court and the zone list are always drawn, empty until a season's
-  // zones arrive, so the card keeps its size while they load; only the line
-  // under them says what's going on.
   let options = "<option>Loading…</option>";
   if (seasons.length > 0) {
     options = seasons
@@ -410,27 +310,12 @@ function playerZonesSection() {
       .join("");
   }
   const data = state.playerCard.zones.get(state.playerCard.season);
-  let shown = NO_ZONES;
-  let status = "<span>Loading zones…</span>";
-  if (data instanceof Error) {
-    status = `<span class="notice">${escapeHtml(data.message)}</span>`;
-  } else if (data && data !== "loading") {
-    shown = data;
-    status = `<span>${Object.values(data.zones).reduce((sum, z) => sum + z.fga, 0)} shots</span>`;
-  }
   return `
     <div class="card-zones-head">
       <h3>Hot/cold zones</h3>
       <label>Season <select id="cardZoneSeason"${seasons.length === 0 ? " disabled" : ""}>${options}</select></label>
     </div>
-    <div class="card-zones-body">
-      ${playerZonesCourt(shown)}
-      ${playerZonesList(shown)}
-    </div>
-    <p class="legend">
-      ${status}
-      <span class="zones-key">Colder <span class="zones-scale"></span> Hotter than the league</span>
-    </p>`;
+    ${zonesBody(data, `${state.playerCard.name}'s shooting by zone`, "player")}`;
 }
 
 function renderPlayerCard() {
@@ -459,11 +344,14 @@ function renderPlayerCard() {
       </section>
       <section class="card-zones">${playerZonesSection()}</section>
     </div>`;
+  applyCardSorts(playerDialog);
 }
 
-async function loadPlayerZones(season) {
+export async function loadPlayerZones(season) {
   const card = state.playerCard;
   card.season = season;
+  // The season shown is in the URL, so a link opens the same court.
+  writeHash();
   if (card.zones.has(season)) {
     renderPlayerCard();
     return;
@@ -505,15 +393,30 @@ async function loadLeagueSeasons(card) {
   renderPlayerCard();
 }
 
-export async function openPlayerCard(event) {
+// Opening from a player's name in the box score adds the card to the
+// browser's history, so Back closes it.
+export function openPlayerCard(event) {
   const button = event.target.closest(".player-link");
   if (!button) {
     return;
   }
 
-  const row = currentStats.find((r) => String(r.player_id) === button.dataset.player);
+  showPlayerCard(button.dataset.player, null, "box_score");
+  writeHash({ push: true });
+}
+
+// Opens a player's card, by id: from the box score or from a link (see
+// syncCard in hash.js), which can name the season of zones to show. The
+// card gets the player's name and team from the game's box score, so it
+// only opens for a player in the game on screen; returns false otherwise.
+export function showPlayerCard(id, zonesSeason, source) {
+  const row = currentStats.find((r) => String(r.player_id) === String(id));
+  if (!row) {
+    return false;
+  }
+
   const card = {
-    id: button.dataset.player,
+    id: String(id),
     name: `${row.first_name} ${row.last_name}`,
     team: teamById(row.team_id),
     position: row.position,
@@ -524,11 +427,17 @@ export async function openPlayerCard(event) {
     league: new Map(),
   };
   state.playerCard = card;
-  track("player_card_open", { player_id: Number(card.id), player: card.name });
+  track("player_card_open", { player_id: Number(card.id), player: card.name, source });
   hideTooltip();
   renderPlayerCard();
-  playerDialog.showModal();
+  if (!playerDialog.open) {
+    playerDialog.showModal();
+  }
+  loadPlayerCard(card, zonesSeason);
+  return true;
+}
 
+async function loadPlayerCard(card, zonesSeason) {
   try {
     card.career = await getJson(`/api/player?player_id=${card.id}`);
   } catch (err) {
@@ -538,34 +447,22 @@ export async function openPlayerCard(event) {
     return;
   }
   loadLeagueSeasons(card);
-  // Start with the zones for the season of the game on screen, if the player
-  // has them, or else their latest.
+  // Start with the zones for the season a link asked for, or else the
+  // season of the game on screen, if the player has them, or else their
+  // latest.
   const seasons = zoneSeasons();
-  const gameSeason = Number(seasonSelect.value);
   if (seasons.length === 0) {
     renderPlayerCard();
     return;
   }
-  loadPlayerZones(seasons.includes(gameSeason) ? gameSeason : seasons[0]);
-}
-
-// Outlines a zone on the card's court while it, or its row in the zone
-// list, is hovered.
-export function outlineCardZone(event) {
-  const hovered = event.target.closest(".card-court .zone, .zone-list tr[data-zone]");
-  highlightCardZone(hovered?.dataset.zone);
-}
-
-// Marks a zone on the card both ways: outlined on the court, and its row
-// highlighted in the zone list. No zone clears both.
-export function highlightCardZone(zone) {
-  outlineZone(playerDialog.querySelector(".card-court"), zone);
-  for (const row of playerDialog.querySelectorAll(".zone-list tr[data-zone]")) {
-    row.classList.toggle("zone-hover", row.dataset.zone === zone);
-  }
+  const start = [zonesSeason, Number(seasonSelect.value)].find((season) => seasons.includes(season)) ?? seasons[0];
+  loadPlayerZones(start);
 }
 
 export function playerCardClick(event) {
+  if (cardSortClick(event)) {
+    return;
+  }
   // A click on the backdrop lands on the dialog itself.
   if (event.target === playerDialog || event.target.closest(".player-card-close")) {
     playerDialog.close();

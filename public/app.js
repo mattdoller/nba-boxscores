@@ -3,16 +3,18 @@
 // the URL (or the last one seen).
 import { loadPref } from "./lib/prefs.js";
 import { rememberSection, sortStats } from "./ui/boxscore.js";
+import { highlightCardZone, outlineCardZone } from "./ui/cardzones.js";
 import { boxscoreEl, seasonSelect, teamSelect } from "./ui/dom.js";
 import { closePlayerMenu, gamePeriods, playerMenuChange, playerMenuClick, selectPeriod, showPeriod } from "./ui/filters.js";
 import { replayShot } from "./ui/flights.js";
 import { loadGames, loadInfo, loadSeasons, loadTeams } from "./ui/games.js";
-import { applyHash } from "./ui/hash.js";
+import { applyHash, cardClosed } from "./ui/hash.js";
 import { clearPlayLinks, linkPlay, showPlayShot, togglePbp } from "./ui/pbp.js";
 import { cycleSpeed, playButton, togglePlayback } from "./ui/playback.js";
-import { highlightCardZone, openPlayerCard, outlineCardZone, playerCardChange, playerCardClick, playerDialog } from "./ui/playercard.js";
+import { openPlayerCard, playerCardChange, playerCardClick, playerDialog } from "./ui/playercard.js";
 import { showShotTooltip, toggleCourtTrend } from "./ui/shotchart.js";
 import { state } from "./ui/state.js";
+import { openTeamCard, teamCardClick, teamCardClosed, teamDialog } from "./ui/teamcard.js";
 // Sets up the day/night and control panel switches.
 import "./ui/theme.js";
 import { hideTooltip } from "./ui/tooltip.js";
@@ -29,7 +31,7 @@ function gameShortcuts(event) {
   if (!state.currentGame || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
     return;
   }
-  if (playerDialog.open || event.target.closest("input, select, textarea, [tabindex], .panel, .player-menu")) {
+  if (playerDialog.open || teamDialog.open || event.target.closest("input, select, textarea, [tabindex], .panel, .player-menu")) {
     return;
   }
 
@@ -114,13 +116,20 @@ boxscoreEl.addEventListener("click", replayShot);
 boxscoreEl.addEventListener("click", showPlayShot);
 boxscoreEl.addEventListener("click", togglePbp);
 boxscoreEl.addEventListener("click", openPlayerCard);
+boxscoreEl.addEventListener("click", openTeamCard);
 playerDialog.addEventListener("click", playerCardClick);
 playerDialog.addEventListener("mouseover", outlineCardZone);
-playerDialog.addEventListener("mouseleave", () => highlightCardZone(null));
+playerDialog.addEventListener("mouseleave", () => highlightCardZone(playerDialog, null));
 playerDialog.addEventListener("change", playerCardChange);
 playerDialog.addEventListener("close", () => {
+  const id = state.playerCard?.id;
   state.playerCard = null;
+  cardClosed("player", id);
 });
+teamDialog.addEventListener("click", teamCardClick);
+teamDialog.addEventListener("mouseover", outlineCardZone);
+teamDialog.addEventListener("mouseleave", () => highlightCardZone(teamDialog, null));
+teamDialog.addEventListener("close", teamCardClosed);
 // toggle doesn't bubble, so listen while it travels down.
 boxscoreEl.addEventListener("toggle", rememberSection, true);
 boxscoreEl.addEventListener("mouseover", linkPlay);

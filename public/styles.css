@@ -1810,8 +1810,10 @@ table tbody tr:hover > .col-hover {
   text-align: left;
 }
 
-/* Player names in the box scores open the player's card. */
-.player-link {
+/* Player names in the box scores open the player's card, and team names on
+   the scoreboard the team's. */
+.player-link,
+.team-link {
   padding: 0;
   border: 0;
   background: none;
@@ -1821,11 +1823,13 @@ table tbody tr:hover > .col-hover {
   cursor: pointer;
 }
 
-.player-link:hover {
+.player-link:hover,
+.team-link:hover {
   text-decoration: underline;
 }
 
-.player-link:focus-visible {
+.player-link:focus-visible,
+.team-link:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1903,18 +1907,25 @@ table tbody tr:hover > .col-hover {
   outline-offset: 2px;
 }
 
-/* The card's tables have plain headers, not the box score's sort buttons,
-   so they need the padding those buttons bring. Names and teams line up
-   left. */
-.stats.career thead th,
-.zone-list thead th {
+/* The cards' tables sort from their headers like the box scores, except the
+   team card's game log: its plain headers need the padding the sort
+   buttons bring. Names and teams line up left. */
+.team-game-log thead th {
   padding: 7px 10px;
 }
 
 .stats.career th:first-child,
 .zone-list th:first-child,
-.stats.career .text {
+.team-stats-table th:first-child,
+.stats.career .text,
+.team-game-log .text {
   text-align: left;
+}
+
+/* Sortable text columns past the first read left to right, like their
+   cells. */
+.stats thead th.text .sort {
+  justify-content: flex-start;
 }
 
 /* The career heading with its controls beside it. */
@@ -2094,12 +2105,60 @@ table tbody tr:hover > .col-hover {
   font-weight: 600;
 }
 
+/* The team card: its record, then its season stats beside its games. */
+.team-record {
+  margin: 0;
+  color: var(--muted);
+}
+
+.team-record strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.team-card-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.team-card-columns h3 {
+  margin: 0 0 8px;
+}
+
+/* The game log scrolls on its own, about as tall as the stats beside it. */
+.team-games {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.team-game-log tbody tr {
+  cursor: pointer;
+}
+
+.team-game-log tbody tr.current > * {
+  background: var(--hover-cross);
+  font-weight: 600;
+}
+
+/* Losses are muted rather than colored: red and blue already mean better and
+   worse than the league on the cards. */
+.team-game-log .win {
+  font-weight: 600;
+}
+
+.team-game-log .loss {
+  color: var(--muted);
+}
+
 @media (max-width: 720px) {
   .player-card {
     padding: 16px;
   }
 
-  .card-zones-body {
+  .card-zones-body,
+  .team-card-columns {
     grid-template-columns: 1fr;
   }
 }

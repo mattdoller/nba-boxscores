@@ -7,6 +7,7 @@ import {
   findTeamById,
   getTeams,
   leagueDashTeamStats,
+  leagueGameLog,
   playByPlayV3,
   playerCareerStats,
   seasonFromGameId,
@@ -695,6 +696,108 @@ export async function cachePlayer(playerId) {
       await leagueTotals(season);
     }
   }
+}
+
+// Every team's regular-season games, one row per team per game. The season
+// in progress is refreshed as often as a team's game list.
+function leagueGames(season) {
+  let ttlMs = Infinity;
+  if (season === currentSeason()) {
+    ttlMs = 15 * 60_000;
+  }
+  return leagueGameLog({ season, seasonType: SeasonType.regular }, { ttlMs });
+}
+
+// Every shot a team took in a regular season, with the league's averages by
+// zone that season.
+function teamShotChart(teamId, season) {
+  let ttlMs = Infinity;
+  if (season === currentSeason()) {
+    ttlMs = CURRENT_SEASON_TTL_MS;
+  }
+  return shotChartDetail({
+    teamId,
+    season,
+    seasonType: SeasonType.regular,
+    contextMeasure: ContextMeasure.fga,
+  }, { ttlMs });
+}
+
+// Team stats, like shot charts, start with 1996-97.
+function requireTeamStatsSeason(req, res, next) {
+  if (Number(req.query.season) < FIRST_SHOT_SEASON) {
+    return res.status(400).json({ error: `season must be a year from ${FIRST_SHOT_SEASON} (when team stats start) to ${currentSeason()}.` });
+  }
+
+  next();
+}
+
+// A team's regular season, for its card: every game it has played, oldest
+// first, and every team's season totals, which the card ranks the team
+// against. Each team's points allowed come from its games, since the team
+// stats don't have them.
+app.get("/api/team", requireTeamAndSeason, requireTeamStatsSeason, async (req, res) => {
+  const teamId = Number(req.query.team_id);
+  const season = Number(req.query.season);
+  let ttlMs = Infinity;
+  if (season === currentSeason()) {
+    ttlMs = CURRENT_SEASON_TTL_MS;
+  }
+  const [{ LeagueGameLog: rows = [] }, { LeagueDashTeamStats: teamStats = [] }] = await Promise.all([
+    leagueGames(season),
+    leagueDashTeamStats({ season }, { ttlMs }),
+  ]);
+
+  const records = new Map();
+  for (const row of rows) {
+    const record = records.get(row.TEAM_ID) ?? { w: 0, l: 0, opp_pts: 0 };
+    if (row.WL === "W") {
+      record.w++;
+    } else if (row.WL === "L") {
+      record.l++;
+    }
+    record.opp_pts += row.PTS - row.PLUS_MINUS;
+    records.set(row.TEAM_ID, record);
+  }
+  const team = findTeamById(teamId);
+  res.json({
+    team: { id: team.id, abbreviation: team.abbreviation, full_name: team.full_name },
+    season,
+    games: rows
+      .filter((row) => row.TEAM_ID === teamId)
+      .map((row) => ({
+        id: row.GAME_ID,
+        date: row.GAME_DATE,
+        home: row.MATCHUP.includes(" vs. "),
+        opponent: row.MATCHUP.split(/ vs\. | @ /)[1],
+        result: row.WL,
+        pts: row.PTS,
+        opp_pts: row.PTS - row.PLUS_MINUS,
+      })),
+    teams: teamStats.map((row) => ({
+      team_id: row.TEAM_ID,
+      ...totalsFrom(row),
+      w: records.get(row.TEAM_ID)?.w ?? 0,
+      l: records.get(row.TEAM_ID)?.l ?? 0,
+      opp_pts: records.get(row.TEAM_ID)?.opp_pts ?? 0,
+    })),
+  });
+});
+
+// A team's makes and attempts by shot zone in a regular season, with the
+// league's that season: { season, zones, league }, each zone { fgm, fga }.
+app.get("/api/teamzones", requireTeamAndSeason, requireTeamStatsSeason, async (req, res) => {
+  const season = Number(req.query.season);
+  const { Shot_Chart_Detail = [], LeagueAverages = [] } = await teamShotChart(Number(req.query.team_id), season);
+  res.json({ season, zones: zoneTotals(Shot_Chart_Detail), league: zoneTotals(LeagueAverages) });
+});
+
+// Caches everything a team's card asks for in a season. bin/load-fixtures
+// uses it to cache the fake teams under the same requests the routes make.
+export async function cacheTeam(teamId, season) {
+  await leagueGames(season);
+  await leagueDashTeamStats({ season });
+  await teamShotChart(teamId, season);
 }
 
 // Express spots error handlers by their four arguments, so `next` stays.

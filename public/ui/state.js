@@ -17,6 +17,10 @@ export const state = {
   // The card on screen: { id, name, team, position, career, error, season,
   // zones: Map(season -> zones data, "loading", or an Error) }.
   playerCard: null,
+  // The team card on screen: { id, name, season, data (from /api/team, null
+  // while loading), error, zones (from /api/teamzones, "loading", or an
+  // Error) }.
+  teamCard: null,
   // A range dragged across the trend, in seconds since tip-off. `from` is where
   // the drag started, so it can be after `to`.
   trendSelection: null,

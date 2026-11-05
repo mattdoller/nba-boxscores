@@ -704,6 +704,70 @@ describe("API", () => {
     });
   });
 
+  describe("GET /api/team", () => {
+    it("rejects an unknown team or a season before team stats start", async () => {
+      assert.equal((await get("/api/team?team_id=1&season=2014")).status, 400);
+      assert.equal((await get(`/api/team?team_id=${CELTICS_ID}&season=1990`)).status, 400);
+    });
+
+    it("lists the team's games and every team's season totals", async (t) => {
+      const game = (teamId, abbr, id, date, matchup, wl, pts, plusMinus) => ({
+        TEAM_ID: teamId, TEAM_ABBREVIATION: abbr, GAME_ID: id, GAME_DATE: date, MATCHUP: matchup, WL: wl, PTS: pts, PLUS_MINUS: plusMinus,
+      });
+      const calls = stubStatsApi(t, {
+        leaguegamelog: resultSets({
+          LeagueGameLog: [
+            game(CELTICS_ID, "BOS", "0021400001", "2014-10-29", "BOS vs. LAL", "W", 110, 8),
+            game(LAKERS_ID, "LAL", "0021400001", "2014-10-29", "LAL @ BOS", "L", 102, -8),
+            game(CELTICS_ID, "BOS", "0021400009", "2014-11-01", "BOS @ LAL", "L", 95, -5),
+            game(LAKERS_ID, "LAL", "0021400009", "2014-11-01", "LAL vs. BOS", "W", 100, 5),
+          ],
+        }),
+        leaguedashteamstats: resultSets({
+          LeagueDashTeamStats: [
+            { TEAM_ID: CELTICS_ID, GP: 2, PTS: 205, FGM: 80, FGA: 170, AST: 50 },
+            { TEAM_ID: LAKERS_ID, GP: 2, PTS: 202, FGM: 78, FGA: 175, AST: 41 },
+          ],
+        }),
+      });
+
+      const { status, body } = await get(`/api/team?team_id=${CELTICS_ID}&season=2014`);
+
+      assert.equal(status, 200);
+      const log = calls.find((c) => c.endpoint === "leaguegamelog").params;
+      assert.deepEqual([log.Season, log.SeasonType, log.PlayerOrTeam], ["2014-15", "Regular Season", "T"]);
+      assert.deepEqual(body.team, { id: CELTICS_ID, abbreviation: "BOS", full_name: "Boston Celtics" });
+      assert.deepEqual(body.games, [
+        { id: "0021400001", date: "2014-10-29", home: true, opponent: "LAL", result: "W", pts: 110, opp_pts: 102 },
+        { id: "0021400009", date: "2014-11-01", home: false, opponent: "LAL", result: "L", pts: 95, opp_pts: 100 },
+      ]);
+      const celtics = body.teams.find((row) => row.team_id === CELTICS_ID);
+      assert.deepEqual([celtics.gp, celtics.w, celtics.l, celtics.pts, celtics.opp_pts, celtics.ast], [2, 1, 1, 205, 202, 50]);
+      assert.equal(body.teams.length, 2);
+    });
+  });
+
+  describe("GET /api/teamzones", () => {
+    it("adds up the team's season of shots and the league's by zone", async (t) => {
+      const calls = stubStatsApi(t, {
+        shotchartdetail: resultSets({
+          Shot_Chart_Detail: [{ SHOT_ZONE_BASIC: "Restricted Area", SHOT_ZONE_AREA: "Center(C)", SHOT_MADE_FLAG: 1 }],
+          LeagueAverages: [
+            { SHOT_ZONE_BASIC: "Restricted Area", SHOT_ZONE_AREA: "Center(C)", SHOT_ZONE_RANGE: "Less Than 8 ft.", FGA: 900, FGM: 600 },
+          ],
+        }),
+      });
+
+      const { status, body } = await get(`/api/teamzones?team_id=${CELTICS_ID}&season=2013`);
+
+      assert.equal(status, 200);
+      const params = calls[0].params;
+      assert.deepEqual([params.TeamID, params.PlayerID, params.Season, params.GameID], [String(CELTICS_ID), "0", "2013-14", ""]);
+      assert.deepEqual(body.zones, { "Restricted Area|Center(C)": { fgm: 1, fga: 1 } });
+      assert.deepEqual(body.league, { "Restricted Area|Center(C)": { fgm: 600, fga: 900 } });
+    });
+  });
+
   describe("GET /api/league", () => {
     it("rejects a season before team stats start, or none", async () => {
       assert.equal((await get("/api/league?seasons=2022,1990")).status, 400);

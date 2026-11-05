@@ -865,6 +865,11 @@ function fakeCareers({ season, teams, rosters, games, leagueAverages, tools }) {
   return players;
 }
 
+const LEAGUE_GAME_LOG_HEADERS = [
+  "SEASON_ID", "TEAM_ID", "TEAM_ABBREVIATION", "TEAM_NAME", "GAME_ID", "GAME_DATE",
+  "MATCHUP", "WL", "PTS", "PLUS_MINUS",
+];
+
 const TEAM_STAT_HEADERS = [
   "TEAM_ID", "TEAM_NAME", "GP", "MIN", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
   "OREB", "DREB", "REB", "AST", "TOV", "STL", "BLK", "PF", "PTS",
@@ -910,10 +915,11 @@ function fakeLeague(season, teams, byGame) {
 
 // A season of fake games: `gamesPerTeam` for every team, from opening night
 // of `season` (the year it starts). Returns the stats.nba.com responses by
-// endpoint: game logs by team id, each game's summary, box score,
-// play-by-play, and shot chart by game id, each player's career and season
-// shot charts by player id (see fakeCareers), and the league's team stats
-// by season (see fakeLeague).
+// endpoint: game logs by team id, the league's game log, each game's
+// summary, box score, play-by-play, and shot chart by game id, each team's
+// season shot chart by team id, each player's career and season shot charts
+// by player id (see fakeCareers), and the league's team stats by season
+// (see fakeLeague).
 export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
   const tools = makeTools(seededRandom(seed));
   const teams = getTeams();
@@ -952,7 +958,8 @@ export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
     };
   });
 
-  const responses = { teamgamelog: new Map(), byGame: new Map() };
+  const responses = { teamgamelog: new Map(), byGame: new Map(), teamShotCharts: new Map() };
+  const leagueLog = [];
   for (const team of teams) {
     const rows = games
       .filter((g) => g.home.id === team.id || g.away.id === team.id)
@@ -967,10 +974,30 @@ export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
           GAME_DATE: gameLogDate(g.date),
           MATCHUP: home ? `${team.abbreviation} vs. ${g.away.abbreviation}` : `${team.abbreviation} @ ${g.home.abbreviation}`,
           WL: own > theirs ? "W" : "L",
+          PTS: own,
+          PLUS_MINUS: own - theirs,
+          date: g.date,
         };
       });
     responses.teamgamelog.set(team.id, { resultSets: [resultSet("TeamGameLog", GAME_LOG_HEADERS, rows)] });
+    for (const row of rows) {
+      leagueLog.push({
+        SEASON_ID: `2${season}`,
+        TEAM_ID: team.id,
+        TEAM_ABBREVIATION: team.abbreviation,
+        TEAM_NAME: team.full_name,
+        GAME_ID: row.Game_ID,
+        GAME_DATE: row.date,
+        MATCHUP: row.MATCHUP,
+        WL: row.WL,
+        PTS: row.PTS,
+        PLUS_MINUS: row.PLUS_MINUS,
+      });
+    }
   }
+  // Every team's games, oldest first, as leaguegamelog sorts them by date.
+  leagueLog.sort((a, b) => a.GAME_DATE.localeCompare(b.GAME_DATE) || a.GAME_ID.localeCompare(b.GAME_ID));
+  responses.leagueGameLog = new Map([[season, { resultSets: [resultSet("LeagueGameLog", LEAGUE_GAME_LOG_HEADERS, leagueLog)] }]]);
 
   for (const g of games) {
     const { played } = g;
@@ -1066,6 +1093,12 @@ export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
       ],
     };
 
+    for (const row of shotRows) {
+      const teamShots = responses.teamShotCharts.get(row.TEAM_ID) ?? [];
+      teamShots.push(row);
+      responses.teamShotCharts.set(row.TEAM_ID, teamShots);
+    }
+
     responses.byGame.set(g.id, {
       date: g.date,
       home: g.home.abbreviation,
@@ -1075,6 +1108,15 @@ export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
       boxscoretraditionalv3: boxScore,
       playbyplayv3: playByPlay,
       shotchartdetail: shotChart,
+    });
+  }
+  // Each team's shots across the season, as one shot chart.
+  for (const [teamId, rows] of responses.teamShotCharts) {
+    responses.teamShotCharts.set(teamId, {
+      resultSets: [
+        resultSet("Shot_Chart_Detail", SHOT_HEADERS, rows),
+        resultSet("LeagueAverages", LEAGUE_HEADERS, leagueAverages),
+      ],
     });
   }
   responses.league = fakeLeague(season, teams, responses.byGame);

@@ -32,12 +32,16 @@ function statsApi(fake, url) {
     if (params.get("SeasonType") === SeasonType.regular && params.get("Season") === seasonString(SEASON)) {
       body = fake.teamgamelog.get(Number(params.get("TeamID")));
     }
+  } else if (endpoint === "leaguegamelog") {
+    body = fake.leagueGameLog.get(Number(params.get("Season").slice(0, 4)));
   } else if (endpoint === "leaguedashteamstats") {
     body = fake.league.get(Number(params.get("Season").slice(0, 4)));
   } else if (endpoint === "playercareerstats") {
     body = fake.players.get(Number(params.get("PlayerID")))?.career;
   } else if (endpoint === "shotchartdetail" && params.get("PlayerID") !== "0") {
     body = fake.players.get(Number(params.get("PlayerID")))?.shotCharts.get(Number(params.get("Season").slice(0, 4)));
+  } else if (endpoint === "shotchartdetail" && !params.get("GameID")) {
+    body = fake.teamShotCharts.get(Number(params.get("TeamID")));
   } else {
     body = fake.byGame.get(params.get("GameID"))?.[endpoint];
   }

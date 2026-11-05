@@ -122,6 +122,44 @@ describe("the player card", () => {
     assert.equal(page.$(".card-court .zone-outline").children.length, 0);
   });
 
+  it("sorts the career by a column, keeps it as the card redraws, and remembers it", () => {
+    const column = () => [...page.$$("#playerDialog .career thead th")].findIndex((th) => th.textContent === "PTS");
+    const points = () => seasonRows().map((row) => Number(row.cells[column()].textContent));
+    const sortButton = () => page.$$("#playerDialog .career thead .sort").find((b) => b.textContent === "PTS");
+
+    page.click(sortButton());
+    assert.deepEqual(points(), [...points()].sort((a, b) => b - a));
+    assert.equal(sortButton().closest("th").getAttribute("aria-sort"), "descending");
+
+    page.click(sortButton());
+    assert.deepEqual(points(), [...points()].sort((a, b) => a - b));
+
+    // A redraw, like turning the shading off and on, keeps the order.
+    page.click("#cardShading");
+    page.click("#cardShading");
+    assert.deepEqual(points(), [...points()].sort((a, b) => a - b));
+    assert.deepEqual(page.pref("cardSorts").career, { col: column(), dir: "asc" });
+    assert.match(page.$("#playerDialog .career tfoot").textContent, /Career/, "the career row stays at the bottom");
+
+    // Season puts it back in order.
+    page.click(page.$$("#playerDialog .career thead .sort")[0]);
+    assert.deepEqual(seasonRows().map((row) => Number(row.dataset.season)), career.seasons.map((s) => s.season));
+  });
+
+  it("sorts the zone list, with empty zones last either way", () => {
+    const sortButton = () => page.$$("#playerDialog .zone-list thead .sort").find((b) => b.textContent === "FG%");
+    const values = () => page.$$("#playerDialog .zone-list tbody tr").map((row) => row.cells[2].textContent);
+    const shot = () => values().filter((v) => v !== "–").map(Number);
+
+    page.click(sortButton());
+    assert.deepEqual(shot(), [...shot()].sort((a, b) => b - a));
+    assert.ok(values().slice(shot().length).every((v) => v === "–"));
+
+    page.click(sortButton());
+    assert.deepEqual(shot(), [...shot()].sort((a, b) => a - b));
+    assert.ok(values().slice(shot().length).every((v) => v === "–"));
+  });
+
   it("closes from its close button", () => {
     page.click(".player-card-close");
     assert.equal(dialog().open, false);
