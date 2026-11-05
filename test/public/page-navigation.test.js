@@ -20,11 +20,6 @@ describe("getting to a game", () => {
   after(() => page.close());
 
   const shownDate = () => page.$(".scoreboard")?.textContent.match(/\w{3}, \w{3} \d+, \d{4}/)?.[0];
-  const openHash = async (hash) => {
-    page.window.location.hash = hash;
-    await page.waitFor(() => page.window.location.hash !== "" || hash === "", "the hash");
-    await page.settle();
-  };
 
   it("starts with nothing picked", () => {
     assert.equal(page.$("#teamSelect").value, "");
@@ -60,7 +55,7 @@ describe("getting to a game", () => {
     const shots = Object.values(await page.api(`/api/shotchart?game_id=${game.id}`)).flat();
     const player = shots.find((s) => s.period === 2).player_id;
 
-    await openHash(`#team=${team}&season=${SEASON}&date=${game.date}&q=Q2&players=${player}`);
+    await page.go(`#team=${team}&season=${SEASON}&date=${game.date}&q=Q2&players=${player}`);
     await page.waitFor(() => page.hash().get("date") === game.date && page.$("#shotcharts .shot"), "the linked game");
 
     assert.equal(page.$('#periodTabs button[aria-pressed="true"]').dataset.period, "2");
@@ -70,7 +65,7 @@ describe("getting to a game", () => {
   });
 
   it("drops what a link gets wrong, and keeps the rest", async () => {
-    await openHash(`#team=${team}&season=${SEASON}&date=1999-01-01`);
+    await page.go(`#team=${team}&season=${SEASON}&date=1999-01-01`);
 
     assert.equal(page.hash().get("team"), team);
     assert.equal(page.hash().get("date"), null);

@@ -287,6 +287,16 @@ export async function openPage({ hash = "", storage = {}, gamesPerTeam = 2, fixt
     async api(path) {
       return (await realFetch(`${base}${path}`)).json();
     },
+    // Follows a link within the page, as if it were typed into the address
+    // bar, and waits until the page has finished with it. The page hears of
+    // the change a moment later (hashchange), so settling straight away
+    // could finish before it starts.
+    async go(hash) {
+      const heard = new Promise((resolve) => window.addEventListener("hashchange", resolve, { once: true }));
+      window.location.hash = hash;
+      await heard;
+      await page.settle();
+    },
     hash: () => new URLSearchParams(window.location.hash.slice(1)),
     pref: (key) => JSON.parse(window.localStorage.getItem(key)),
     // The fake season's games, in order: { id, date, home, away, score }.
