@@ -150,6 +150,19 @@ describe("playback and the play-by-play", () => {
     assert.equal(page.hash().get("q"), null);
   });
 
+  it("stops playing when another team is picked mid-playback", async () => {
+    page.click("#playButton");
+    await page.waitFor(() => /Pause/.test(playLabel()), "playback to start");
+    const other = [...page.$("#teamSelect").options].find((o) => o.value && o.value !== page.$("#teamSelect").value);
+    page.change("#teamSelect", other.value);
+    await page.settle();
+    // A few frames' worth, for a playback left running to trip over the
+    // court it lost.
+    await sleep(150);
+
+    assert.deepEqual(page.errors, []);
+  });
+
   it("raises no errors", () => {
     assert.deepEqual(page.errors, []);
   });

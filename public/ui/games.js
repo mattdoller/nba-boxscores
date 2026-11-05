@@ -142,6 +142,9 @@ export async function loadGames() {
   calendar.set("enable", []);
   setCalendarRange();
   gameIdsByDate = new Map();
+  // The game goes, so a playback of it stops first, rather than ticking on
+  // without its court and clock.
+  stopPlayback();
   boxscoreEl.innerHTML = "";
   if (!teamId) {
     calendarHint.textContent = "Choose a team to see the dates it played.";
