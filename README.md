@@ -192,3 +192,17 @@ come too fast, so failed requests are retried once, and `bin/backfill`
 spaces its requests out.
 
 More ideas and smaller fixes are in [todo.md](todo.md).
+
+## License and the NBA's data
+
+The code is MIT-licensed; see [LICENSE](LICENSE). `nba-api/` is a port of
+[nba_api](https://github.com/swar/nba_api), also MIT-licensed, whose
+notice is in [nba-api/LICENSE](nba-api/LICENSE).
+
+This project isn't affiliated with or endorsed by the NBA. Its data comes
+from stats.nba.com, an unofficial API, and belongs to the NBA; it's meant
+for personal, non-commercial use, under the terms of use of
+[NBA.com](https://www.nba.com/termsofuse). The repository holds no NBA
+data: the cache stays on your machine, and the screenshots are of a
+made-up season. Team names are the teams' own, used to say which is
+which.

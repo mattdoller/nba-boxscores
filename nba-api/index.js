@@ -1,6 +1,7 @@
 // A JavaScript port of the parts of nba_api (https://github.com/swar/nba_api)
 // this app uses. Each endpoint returns its data sets by name, like
-// nba_api's get_normalized_dict().
+// nba_api's get_normalized_dict(). nba_api is MIT-licensed; its notice is in
+// nba-api/LICENSE.
 
 export { STATS_HEADERS, StatsApiError, sendApiRequest, setOffline } from "./http.js";
 export * from "./parameters.js";

@@ -2,6 +2,7 @@
   "name": "nba-boxscores",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "description": "Pick an NBA team and a past date to see the box score, via stats.nba.com (the API behind nba_api)",
   "type": "module",
   "main": "server.js",
