@@ -6,30 +6,64 @@ The data comes from stats.nba.com (the API behind
 [nba_api](https://github.com/swar/nba_api)), and every response is cached in
 SQLite so a game is only ever fetched once.
 
+![Playing a game back from the middle of the third quarter, with the hot and cold zones switched on partway](images/shot-chart-playback.gif)
+
 ## What's on a game's page
+
+The pictures here are a made-up season (see
+[Trying it with fake data](#trying-it-with-fake-data)), taken by
+`bin/readme-screenshots`.
+
+### Shot chart and play-by-play
+
+Every field goal attempt on a 3D court, with the play-by-play beside it.
+Hovering a shot or a play highlights the other; clicking a play jumps the
+court to that moment in the game. Each arena has its own floor: wood
+planks, with Boston's parquet, Orlando's squares, and Brooklyn's
+herringbone.
+
+![The shot chart and play-by-play](images/shot-chart.png)
+
+- **Playback** replays the game's shots in order, with the clock, score,
+  and FG counts following along, at ½×, 1×, 2×, or 4×. Space plays and
+  pauses, and the arrow keys step through quarters.
+- **Hot/cold zones** shade stats.nba.com's 14 shot zones by how each team
+  shot there against the league that season (red hotter, blue colder).
+  Hovering a zone outlines it.
+- **Filters** narrow the court and the play-by-play to any quarter, and to
+  any set of players.
+
+### Scoring runs
+
+The running score over the game, with scoring runs shaded. Switch on the
+win probability line, and its biggest swings are shaded instead. During
+playback it draws along with the game. Drag across it to sum up any
+stretch.
+
+![The scoring trend drawing during playback, with win probability switched on halfway](images/scoring-runs-playback.gif)
+
+### Biggest plays
+
+The baskets that swung the win probability most, each a click from its
+moment on the court.
+
+![The game's biggest plays](images/biggest-plays.png)
+
+### Box scores and lineups
 
 - **Scoreboard and box scores**: the final, the line score by quarter, and
   each team's player stats, sortable by any column.
-- **Shot chart and play-by-play**: every field goal attempt on a 3D court,
-  with the play-by-play beside it. Hovering a shot or a play highlights the
-  other; clicking a play jumps the court to that moment in the game.
-- **Playback**: replays the game's shots in order, with the clock, score,
-  and FG counts following along. Speeds of ½×, 1×, 2×, and 4×; Space plays
-  and pauses, and the arrow keys step through quarters.
-- **Hot/cold zones**: shades stats.nba.com's 14 shot zones by how each team
-  shot there against the league that season (red hotter, blue colder).
-  Hovering a zone outlines it.
-- **Scoring runs**: the running score over the game, with scoring runs
-  shaded and an optional win probability line.
-- **Biggest plays**: the baskets that swung the win probability most,
-  each a click from its moment on the court.
 - **Lineups**: every five-man unit each team played, with its minutes and
   what it outscored the other team by, worked out from the play-by-play's
   substitutions.
-- **Filters**: any quarter, and any set of players, for the charts and
-  play-by-play.
-- **Player search**: type a name in the control panel to find anyone who
-  has played in the league, current or retired, and open their card.
+
+### Player and team cards
+
+<p>
+  <img src="images/player-card.png" width="49%" alt="A player's card: their season so far, career, and hot/cold zones">
+  <img src="images/team-card.png" width="49%" alt="A team's card: its season, games, hot/cold zones, and history">
+</p>
+
 - **Player cards**: clicking a name in a box score opens the player's
   season so far, up to the game on screen: their averages, a trend across
   their games, and their game log (click a game to open it). Then their
@@ -37,6 +71,8 @@ SQLite so a game is only ever fetched once.
   away, and each stat shaded against the league that season. Below it are
   their hot/cold zones for the season so far or any season from 1996–97
   on, on a half court seen from above.
+- **Player search**: type a name in the control panel to find anyone who
+  has played in the league, current or retired, and open their card.
 - **Team cards**: clicking a team's name on the scoreboard opens its
   regular season: its record (and where it stood after the game on
   screen), each stat ranked against the other 29 teams and shaded against
@@ -46,6 +82,8 @@ SQLite so a game is only ever fetched once.
 - **Card tables** sort by any column, like the box scores: a player's
   career, a team's season stats (by rank, say), and either card's zones.
   Each table remembers its sort.
+
+### Links and settings
 
 The game on screen is in the URL, so any view can be bookmarked or shared,
 along with its quarter, players, and any card open over it (and the season
@@ -88,6 +126,7 @@ script does under the hood, and what to watch out for.
 | `bin/cache` | Shows the cache's size by endpoint (`--stats`), deletes expired responses (`--prune`), a season (`--prune-season`), or everything (`--clear`); `--cache-db` picks the file |
 | `bin/backfill` | Fetches and caches every game in a finished season, one request every 2 seconds (`--season`, `--delay`) |
 | `bin/index` | Adds the games already in the cache to the season index the player cards read (`--season`, `--rebuild`, `--cache-db`) |
+| `bin/readme-screenshots` | Takes the screenshots in `images/` from a fake season in headless Chrome (`--team`, `--seed`, `--seconds`) |
 | `bin/load-fixtures` | Fills a separate cache with a fake season to try the app on (`--games`, `--seed`, `--season`, `--reset`) |
 
 ## Trying it with fake data
