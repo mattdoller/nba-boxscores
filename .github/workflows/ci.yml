@@ -1,5 +1,6 @@
-# Lints and tests every push and pull request. The tests stub stats.nba.com
-# and use an in-memory cache, so they need no network access or secrets.
+# Lints and tests every push and pull request, and checks the dependencies
+# for known vulnerabilities. The tests stub stats.nba.com and use an
+# in-memory cache, so they need no network access or secrets.
 name: CI
 
 on:
@@ -23,5 +24,18 @@ jobs:
       - name: Lint
         run: bin/lint
 
+      # With coverage, which goes on the run's summary page as a table. bash
+      # (rather than the default sh) so a failing test fails the step
+      # through the pipe.
       - name: Test
-        run: bin/test
+        shell: bash
+        run: bin/test --coverage | tee test-output.txt
+
+      - name: Coverage summary
+        if: always()
+        run: node dev/coverage-summary.js < test-output.txt >> "$GITHUB_STEP_SUMMARY"
+
+      # High and critical advisories only: the moderate ones today are in
+      # ESLint's own dependencies, which never reach the browser or server.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high

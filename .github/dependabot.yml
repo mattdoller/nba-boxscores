@@ -1,0 +1,18 @@
+# Weekly pull requests to update the npm packages and the actions the
+# workflows use. CI checks each one before it's merged.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Patch and minor updates come together in one pull request; major ones
+    # each get their own.
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -118,7 +118,7 @@ export function renderBoxScore(game, stats) {
         <summary><h2>Shot chart and play-by-play</h2></summary>
         <div class="shot-layout${pbpCollapsed ? " pbp-collapsed" : ""}" id="shotLayout">
           <div id="shotcharts" class="shotcharts"><p class="hint">Loading shot charts…</p></div>
-          <aside class="pbp-panel">
+          <aside class="pbp-panel" aria-label="Play-by-play">
             <button type="button" id="pbpToggle" class="pbp-toggle" aria-expanded="${!pbpCollapsed}" aria-controls="playbyplay"
               title="${pbpCollapsed ? "Show" : "Hide"} the play-by-play">
               <span class="pbp-toggle-label">Play-by-play</span>
@@ -182,7 +182,7 @@ function renderLineScore(game) {
   return `
     <table class="linescore">
       <thead>
-        <tr><th></th>${periods.map((p) => `<th>${escapeHtml(p.label)}</th>`).join("")}<th>T</th></tr>
+        <tr><th><span class="visually-hidden">Team</span></th>${periods.map((p) => `<th>${escapeHtml(p.label)}</th>`).join("")}<th>T</th></tr>
       </thead>
       <tbody>
         ${row(game.away)}

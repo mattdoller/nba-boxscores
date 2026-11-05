@@ -204,7 +204,7 @@ function scoreChangeTable(first, last) {
     </tr>`;
   return `
     <table class="tt-range">
-      <thead><tr><th></th><th>Start</th><th>End</th><th>Pts</th></tr></thead>
+      <thead><tr><th><span class="visually-hidden">Score</span></th><th>Start</th><th>End</th><th>Pts</th></tr></thead>
       <tbody>${row(state.currentGame.away, "away")}${row(state.currentGame.home, "home")}</tbody>
     </table>`;
 }

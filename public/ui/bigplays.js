@@ -36,7 +36,7 @@ export function renderBigPlays() {
     <div class="table-wrap">
       <table class="stats big-plays">
         <thead>
-          <tr><th></th><th class="text">Time</th><th class="text">Team</th><th class="text">Play</th>
+          <tr><th><span class="visually-hidden">Rank</span></th><th class="text">Time</th><th class="text">Team</th><th class="text">Play</th>
             <th>${escapeHtml(away.abbreviation)}–${escapeHtml(home.abbreviation)}</th>
             <th title="The scoring team's chance of winning, just before and after">To win</th><th title="Points of win probability gained">Swing</th></tr>
         </thead>

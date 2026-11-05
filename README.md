@@ -143,7 +143,10 @@ To serve only what's cached from the real cache too, start the server with
   the cache is in memory, so the tests never touch the network or
   `data/`. The page is tested in jsdom: the real `index.html` and `app.js`,
   served by the real server on a small fake season, clicked through like a
-  user would.
+  user would, and checked for accessibility problems with axe-core.
+- **`.github/`** runs lint, the tests (with coverage on each run's summary
+  page), and `npm audit` on every push; CodeQL's security scan while the
+  repository is public; and Dependabot's weekly update pull requests.
 
 stats.nba.com has no published rate limit and sometimes stalls requests that
 come too fast, so failed requests are retried once, and `bin/backfill`

@@ -97,6 +97,11 @@ The `test/public/page-*.test.js` files test the page itself: each loads
 server on a small fake season (`test/public/page.js` sets this up), and
 clicks through it like a user. Each opens one page and its tests run in
 order, so a failure early in a file can fail the tests after it.
+`page-a11y.test.js` runs axe-core over a game, both cards, and the player
+search, minus the checks that need real layout, like color contrast.
+
+In CI, `bin/test --coverage` puts its coverage on the run's summary page
+as a table (see `dev/coverage-summary.js`).
 
 ## lint
 
