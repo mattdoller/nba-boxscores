@@ -147,50 +147,54 @@ function isMadeFreeThrow(play) {
 
 export function showPlayShot(event) {
   const row = event.target.closest("#playbyplay tr[data-play]");
-  if (!row) {
+  if (row) {
+    jumpToPlay(row.dataset.play, "play_by_play");
+  }
+}
+
+// Puts the court at a play (see seekToShot and seekToPlay): a shot, flying in
+// with the court as it stood, or a made free throw. Pauses any playback, and
+// brings the court into view first when it's off screen. Other plays aren't
+// on the court and do nothing.
+export function jumpToPlay(playId, source) {
+  const mark = shotMarksForPlay(playId)[0];
+  const play = playByPlay?.find((p) => String(p.id) === String(playId));
+  const freeThrow = !mark && play && isMadeFreeThrow(play) && shotData;
+  if (!mark && !freeThrow) {
     return;
   }
 
-  const mark = shotMarksForPlay(row.dataset.play)[0];
-  const play = playByPlay?.find((p) => String(p.id) === row.dataset.play);
-  if (!mark && play && isMadeFreeThrow(play) && shotData) {
-    if (playback?.frame) {
-      track("playback", { action: "pause", playhead: playback.playhead, source: "play" });
-      pausePlayback();
-    }
-    track("play_seek", { play_id: play.id, kind: "free_throw" });
-    followPlay(play.id);
-    seekToPlay(play);
-    return;
-  }
-  if (!mark) {
-    return;
-  }
-
-  for (const el of boxscoreEl.querySelectorAll(".picked")) {
-    el.classList.remove("picked");
-  }
-  mark.classList.add("picked");
   // Clicking a play during playback pauses it there.
   if (playback?.frame) {
     track("playback", { action: "pause", playhead: playback.playhead, source: "play" });
     pausePlayback();
   }
-  track("play_seek", { play_id: Number(row.dataset.play), kind: "shot" });
-  followPlay(row.dataset.play);
+  track("play_seek", { play_id: Number(playId), kind: freeThrow ? "free_throw" : "shot", source });
+  followPlay(playId);
   document.getElementById("shotchartsSection").open = true;
-  const court = mark.closest(".shotchart").getBoundingClientRect();
+  let seek = () => seekToShot(mark);
+  if (freeThrow) {
+    seek = () => seekToPlay(play);
+  } else {
+    for (const el of boxscoreEl.querySelectorAll(".picked")) {
+      el.classList.remove("picked");
+    }
+    mark.classList.add("picked");
+  }
+
+  const chart = document.querySelector("#shotcharts .shotchart");
+  const court = chart.getBoundingClientRect();
   if (court.top >= 0 && court.bottom <= window.innerHeight) {
-    seekToShot(mark);
+    seek();
     return;
   }
 
-  mark.closest(".shotchart").scrollIntoView({ behavior: "smooth", block: "center" });
+  chart.scrollIntoView({ behavior: "smooth", block: "center" });
   let replayed = false;
   const replay = () => {
     if (!replayed) {
       replayed = true;
-      seekToShot(mark);
+      seek();
     }
   };
   window.addEventListener("scrollend", replay, { once: true });

@@ -1917,8 +1917,10 @@ table tbody tr:hover > .col-hover {
 .stats.career th:first-child,
 .zone-list th:first-child,
 .team-stats-table th:first-child,
+.team-history-table th:first-child,
 .stats.career .text,
-.team-game-log .text {
+.team-game-log .text,
+.team-history-table .text {
   text-align: left;
 }
 
@@ -2015,7 +2017,8 @@ table tbody tr:hover > .col-hover {
   cursor: pointer;
 }
 
-.stats.career tbody tr.picked > * {
+.stats.career tbody tr.picked > *,
+.team-history-table tbody tr.picked > * {
   background: var(--hover-cross);
   font-weight: 600;
 }
@@ -2127,8 +2130,10 @@ table tbody tr:hover > .col-hover {
   margin: 0 0 8px;
 }
 
-/* The game log scrolls on its own, about as tall as the stats beside it. */
-.team-games {
+/* The game log scrolls on its own, about as tall as the stats beside it,
+   and so does the history, decades long for some teams. */
+.team-games,
+.team-history {
   max-height: 520px;
   overflow-y: auto;
 }
@@ -2161,4 +2166,74 @@ table tbody tr:hover > .col-hover {
   .team-card-columns {
     grid-template-columns: 1fr;
   }
+}
+
+/* Lineups: each team's five-man units, one table above the other. */
+.lineups {
+  display: grid;
+  gap: 20px;
+}
+
+.team-lineups h3 {
+  margin: 0 0 8px;
+}
+
+.lineups-table th:first-child,
+.lineups-table .lineup {
+  text-align: left;
+}
+
+/* The five names wrap rather than push the numbers off the side. */
+.lineups-table .lineup {
+  white-space: normal;
+  font-weight: 500;
+}
+
+.lineups-table .hot {
+  color: var(--zone-hot);
+  font-weight: 600;
+}
+
+.lineups-table .cold {
+  color: var(--zone-cold);
+  font-weight: 600;
+}
+
+.show-lineups {
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.show-lineups:hover {
+  background: var(--hover);
+}
+
+/* Biggest plays: a ranked list, each row a click from the court. */
+.big-plays th:first-child,
+.big-plays .text {
+  text-align: left;
+}
+
+.big-plays tbody tr {
+  cursor: pointer;
+}
+
+.big-plays .play {
+  white-space: normal;
+}
+
+.big-plays .hot {
+  color: var(--zone-hot);
+  font-weight: 600;
+}
+
+.big-plays thead th {
+  padding: 7px 10px;
 }

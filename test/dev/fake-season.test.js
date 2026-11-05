@@ -147,6 +147,26 @@ describe("fakeSeason", () => {
     }
   });
 
+  it("gives every team a history whose last season is its record so far", () => {
+    const team = getTeams()[0];
+    const history = rows(season.teamHistories.get(team.id), "TeamStats");
+    const log = rows(season.leagueGameLog.get(2025), "LeagueGameLog").filter((row) => row.TEAM_ID === team.id);
+
+    assert.deepEqual(history.map((row) => row.YEAR), ["2021-22", "2022-23", "2023-24", "2024-25", "2025-26"]);
+    const latest = history.at(-1);
+    assert.deepEqual([latest.WINS, latest.LOSSES], [log.filter((g) => g.WL === "W").length, log.filter((g) => g.WL === "L").length]);
+    assert.ok(history.slice(0, -1).every((row) => row.WINS + row.LOSSES === 82));
+  });
+
+  it("crowns one champion a season", () => {
+    for (const year of ["2021-22", "2024-25"]) {
+      const champions = [...season.teamHistories.values()]
+        .flatMap((json) => rows(json, "TeamStats"))
+        .filter((row) => row.YEAR === year && row.NBA_FINALS_APPEARANCE === "LEAGUE CHAMPION");
+      assert.equal(champions.length, 1, year);
+    }
+  });
+
   it("gives every team a season shot chart of its games' shots", () => {
     const team = getTeams()[0];
     const chart = season.teamShotCharts.get(team.id);

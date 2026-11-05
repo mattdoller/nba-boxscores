@@ -40,6 +40,10 @@ const PERIOD_SECONDS = 720;
 const POSSESSION_SECONDS = [6, 23];
 const OVERTIME_SECONDS = 300;
 
+// How often a team makes a substitution in a dead ball between possessions,
+// which comes to about 20 a game, like the NBA's.
+const SUBSTITUTION_CHANCE = 0.1;
+
 // How often a possession ends each way, before the shot itself.
 const TURNOVER_RATE = 0.13;
 const SHOOTING_FOUL_RATE = 0.09;
@@ -344,8 +348,12 @@ function simulateGame(game, rosters, tools) {
     location: side === "home" ? "h" : "v",
   });
 
-  // Five players, more likely the more minutes they're down for.
-  const lineup = (side) => {
+  // Five players, more likely the more minutes they're down for: the
+  // starters to open the first and third quarters, anyone otherwise.
+  const lineup = (side, starters) => {
+    if (starters) {
+      return teamOf[side].filter((p) => p.starter);
+    }
     const pool = teamOf[side].filter((p) => minutesTonight.get(p.id) > 0);
     const chosen = [];
     while (chosen.length < 5) {
@@ -353,6 +361,29 @@ function simulateGame(game, rosters, tools) {
       chosen.push(player);
     }
     return chosen;
+  };
+
+  // Who's on the floor, and for how long each player has been tonight. A
+  // player's share of their minutes so far decides who comes out (the most
+  // over) and who goes in (the most under).
+  const onFloor = { home: [], away: [] };
+  const floorSeconds = new Map([...teamOf.home, ...teamOf.away].map((p) => [p.id, 0]));
+  const usage = (player) => floorSeconds.get(player.id) / (minutesTonight.get(player.id) * 60);
+  const substitute = (period, clock, side) => {
+    const out = onFloor[side].reduce((most, p) => (usage(p) > usage(most) ? p : most));
+    const bench = teamOf[side].filter((p) => minutesTonight.get(p.id) > 0 && !onFloor[side].includes(p));
+    const into = bench.reduce((least, p) => (usage(p) < usage(least) ? p : least), bench[0]);
+    if (!into || usage(into) >= usage(out)) {
+      return;
+    }
+    onFloor[side] = onFloor[side].map((p) => (p === out ? into : p));
+    // Like stats.nba.com's: the player coming out, with the one going in
+    // named only in the description.
+    add(period, clock, {
+      ...byPlayer(out, side),
+      description: `SUB: ${into.last} FOR ${out.last}`,
+      actionType: "Substitution",
+    });
   };
 
   const other = (side) => (side === "home" ? "away" : "home");
@@ -535,11 +566,17 @@ function simulateGame(game, rosters, tools) {
         actionType: "Jump Ball",
       });
     }
+    // Lineups change between quarters without a substitution on record, as
+    // in stats.nba.com's play-by-play.
+    for (const team of ["home", "away"]) {
+      onFloor[team] = lineup(team, period === 1 || period === 3);
+    }
     let clock = length;
     while (clock > 0) {
+      const from = clock;
       clock = Math.max(0, Math.round((clock - between(...POSSESSION_SECONDS)) * 10) / 10);
-      const offense = lineup(side);
-      const defense = lineup(other(side));
+      const offense = onFloor[side];
+      const defense = onFloor[other(side)];
       const points = possession(period, clock, side, offense, defense);
       for (const player of offense) {
         lines.get(player.id).plusMinusPoints += points;
@@ -547,7 +584,17 @@ function simulateGame(game, rosters, tools) {
       for (const player of defense) {
         lines.get(player.id).plusMinusPoints -= points;
       }
+      for (const player of [...offense, ...defense]) {
+        floorSeconds.set(player.id, floorSeconds.get(player.id) + (from - clock));
+      }
       side = other(side);
+      if (clock > 0) {
+        for (const team of ["home", "away"]) {
+          if (chance(SUBSTITUTION_CHANCE)) {
+            substitute(period, clock, team);
+          }
+        }
+      }
     }
     add(period, 0, {
       description: `End of ${periodName(period)}`,
@@ -558,14 +605,12 @@ function simulateGame(game, rosters, tools) {
     periodScores.away.push(score.away - before.away);
   }
 
-  // Minutes scale with overtime so each team's add up to the game's length.
-  const periods = periodScores.home.length;
-  const gameMinutes = 48 + (periods - 4) * 5;
-  for (const side of ["home", "away"]) {
-    const total = teamOf[side].reduce((sum, p) => sum + minutesTonight.get(p.id), 0);
-    for (const player of teamOf[side]) {
-      lines.get(player.id).seconds = (minutesTonight.get(player.id) / total) * gameMinutes * 5 * 60;
-    }
+  // Minutes are the time each player was on the floor, so they add up to
+  // the game's length five times over and agree with the lineups. A player
+  // who never got in didn't play.
+  for (const player of [...teamOf.home, ...teamOf.away]) {
+    lines.get(player.id).seconds = floorSeconds.get(player.id);
+    minutesTonight.set(player.id, floorSeconds.get(player.id) / 60);
   }
 
   return { actions, shots, lines, score, periodScores, minutesTonight };
@@ -913,13 +958,78 @@ function fakeLeague(season, teams, byGame) {
   return new Map(Array.from({ length: MAX_PAST_SEASONS + 1 }, (_, i) => [season - i, json]));
 }
 
+const TEAM_HISTORY_HEADERS = [
+  "TEAM_ID", "TEAM_CITY", "TEAM_NAME", "YEAR", "GP", "WINS", "LOSSES", "WIN_PCT",
+  "CONF_RANK", "DIV_RANK", "PO_WINS", "PO_LOSSES", "NBA_FINALS_APPEARANCE",
+];
+
+// Each team's history (teamyearbyyearstats) for the seasons a fake career
+// covers: made-up records for the earlier ones, with playoffs, and the
+// simulated season's record so far. The real teams have no conferences in
+// this app, so the first fifteen by id stand in for one conference and each
+// five for a division. Returns Map(team id -> json).
+function fakeHistories(season, teams, leagueLog, tools) {
+  const rows = new Map(teams.map((team) => [team.id, []]));
+  const rank = (group, team, wins) => group.filter((t) => wins.get(t.id) > wins.get(team.id)).length + 1;
+  for (let year = season - MAX_PAST_SEASONS; year <= season; year++) {
+    const wins = new Map();
+    const losses = new Map();
+    const playoffs = new Map();
+    if (year < season) {
+      for (const team of teams) {
+        const w = tools.int(17, 65);
+        wins.set(team.id, w);
+        losses.set(team.id, 82 - w);
+      }
+      // The best sixteen make the playoffs; one of the best four wins it all
+      // over another.
+      const seeded = [...teams].sort((a, b) => wins.get(b.id) - wins.get(a.id));
+      const best = seeded.slice(0, 4);
+      const champion = tools.pick(best);
+      const runnerUp = tools.pick(best.filter((team) => team !== champion));
+      for (const team of seeded.slice(0, 16)) {
+        playoffs.set(team.id, { w: tools.int(0, 11), l: 4, finals: "N/A" });
+      }
+      playoffs.set(champion.id, { w: 16, l: tools.int(2, 8), finals: "LEAGUE CHAMPION" });
+      playoffs.set(runnerUp.id, { w: tools.int(12, 15), l: tools.int(12, 14), finals: "FINALS APPEARANCE" });
+    } else {
+      for (const team of teams) {
+        const games = leagueLog.filter((row) => row.TEAM_ID === team.id);
+        wins.set(team.id, games.filter((row) => row.WL === "W").length);
+        losses.set(team.id, games.filter((row) => row.WL === "L").length);
+      }
+    }
+    teams.forEach((team, i) => {
+      const w = wins.get(team.id);
+      const l = losses.get(team.id);
+      const playoff = playoffs.get(team.id) ?? { w: 0, l: 0, finals: "N/A" };
+      rows.get(team.id).push({
+        TEAM_ID: team.id,
+        TEAM_CITY: team.city,
+        TEAM_NAME: team.nickname,
+        YEAR: `${year}-${String(year + 1).slice(2)}`,
+        GP: w + l,
+        WINS: w,
+        LOSSES: l,
+        WIN_PCT: percentage(w, w + l),
+        CONF_RANK: rank(teams.slice(i < 15 ? 0 : 15, i < 15 ? 15 : 30), team, wins),
+        DIV_RANK: rank(teams.slice(Math.floor(i / 5) * 5, Math.floor(i / 5) * 5 + 5), team, wins),
+        PO_WINS: playoff.w,
+        PO_LOSSES: playoff.l,
+        NBA_FINALS_APPEARANCE: playoff.finals,
+      });
+    });
+  }
+  return new Map([...rows].map(([teamId, teamRows]) => [teamId, { resultSets: [resultSet("TeamStats", TEAM_HISTORY_HEADERS, teamRows)] }]));
+}
+
 // A season of fake games: `gamesPerTeam` for every team, from opening night
 // of `season` (the year it starts). Returns the stats.nba.com responses by
 // endpoint: game logs by team id, the league's game log, each game's
 // summary, box score, play-by-play, and shot chart by game id, each team's
-// season shot chart by team id, each player's career and season shot charts
-// by player id (see fakeCareers), and the league's team stats by season
-// (see fakeLeague).
+// season shot chart and history by team id (see fakeHistories), each
+// player's career and season shot charts by player id (see fakeCareers),
+// and the league's team stats by season (see fakeLeague).
 export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
   const tools = makeTools(seededRandom(seed));
   const teams = getTeams();
@@ -1121,5 +1231,8 @@ export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
   }
   responses.league = fakeLeague(season, teams, responses.byGame);
   responses.players = fakeCareers({ season, teams, rosters, games, leagueAverages, tools });
+  // Last, so the rest of the season comes out the same as it did before
+  // teams had histories.
+  responses.teamHistories = fakeHistories(season, teams, leagueLog, tools);
   return responses;
 }

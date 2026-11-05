@@ -21,6 +21,11 @@ SQLite so a game is only ever fetched once.
   Hovering a zone outlines it.
 - **Scoring runs**: the running score over the game, with scoring runs
   shaded and an optional win probability line.
+- **Biggest plays**: the baskets that swung the win probability most,
+  each a click from its moment on the court.
+- **Lineups**: every five-man unit each team played, with its minutes and
+  what it outscored the other team by, worked out from the play-by-play's
+  substitutions.
 - **Filters**: any quarter, and any set of players, for the charts and
   play-by-play.
 - **Player cards**: clicking a name in a box score opens the player's
@@ -31,8 +36,9 @@ SQLite so a game is only ever fetched once.
 - **Team cards**: clicking a team's name on the scoreboard opens its
   regular season: its record (and where it stood after the game on
   screen), each stat ranked against the other 29 teams and shaded against
-  the league, every game it has played (click one to open it), and its
-  hot/cold zones.
+  the league, every game it has played (click one to open it), its
+  hot/cold zones, and the franchise's history: every season's record,
+  conference finish, and playoff run, under whatever name it had.
 - **Card tables** sort by any column, like the box scores: a player's
   career, a team's season stats (by rank, say), and either card's zones.
   Each table remembers its sort.
@@ -107,7 +113,8 @@ To serve only what's cached from the real cache too, start the server with
 - **`server.js`** is an Express app serving `public/` and a small JSON API
   (`/api/teams`, `/api/games`, `/api/boxscore`, `/api/playbyplay`,
   `/api/shotchart`, `/api/shotzones`, `/api/player`, `/api/playerzones`,
-  `/api/team`, `/api/teamzones`, `/api/league`, `/api/info`). A player card gets the league totals for its
+  `/api/lineups`, `/api/team`, `/api/teamzones`, `/api/teamhistory`, `/api/league`,
+  `/api/info`). A player card gets the league totals for its
   whole career from `/api/league` in one request.
 - **`nba-api/`** is a JavaScript port of the parts of nba_api this app uses:
   the stats.nba.com endpoints, their parameters, and the headers the site

@@ -16,8 +16,10 @@ import {
   setOffline,
   shotChartDetail,
   teamGameLog,
+  teamYearByYearStats,
 } from "./nba-api/index.js";
 import { hasFixtures, seasonsWithGames } from "./nba-api/cache.js";
+import { gameLineups } from "./lineups.js";
 import { currentSeason, periodLabel } from "./public/lib/format.js";
 import { teamColors } from "./team-colors.js";
 
@@ -369,6 +371,28 @@ app.get("/api/playbyplay", requireGameId, async (req, res) => {
       possession: possession[i],
     };
   }));
+});
+
+// Every five-man unit each team played (see lineups.js), with the players'
+// names: { teams: { [teamId]: [{ players, seconds, pts_for, pts_against }] },
+// players: { [id]: "J. Tatum" }, unmatched }.
+app.get("/api/lineups", requireGameId, async (req, res) => {
+  const { game_id } = req.query;
+  const options = gameCacheOptions(await gameSummary(game_id));
+  const [{ PlayerStats }, { PlayByPlay }] = await Promise.all([
+    boxScoreTraditionalV3({ gameId: game_id }, options),
+    playByPlayV3({ gameId: game_id }, options),
+  ]);
+  if (PlayerStats.length === 0) {
+    return res.status(404).json({ error: "stats.nba.com has no box score for this game." });
+  }
+
+  const { unmatched, ...teams } = gameLineups(PlayByPlay, PlayerStats);
+  res.json({
+    teams,
+    players: Object.fromEntries(PlayerStats.map((p) => [p.personId, p.nameI])),
+    unmatched,
+  });
 });
 
 // Seconds left in the period, from a play-by-play clock like "PT11M42.50S".
@@ -792,9 +816,55 @@ app.get("/api/teamzones", requireTeamAndSeason, requireTeamStatsSeason, async (r
   res.json({ season, zones: zoneTotals(Shot_Chart_Detail), league: zoneTotals(LeagueAverages) });
 });
 
+// A franchise's every regular season, oldest first, for its card's history:
+// the name it played under, its record, where it finished in its conference
+// and division, and how far it went in the playoffs (`finals` is "champion",
+// "finals", or null). The season in progress keeps changing, so the history
+// is refreshed like a career that includes it.
+const FINALS = { "LEAGUE CHAMPION": "champion", "FINALS APPEARANCE": "finals" };
+
+function teamHistory(teamId) {
+  return teamYearByYearStats({ teamId }, {
+    ttlMs: (json) => {
+      const seasons = json.resultSets?.find((s) => s.name === "TeamStats");
+      const year = seasons?.headers.indexOf("YEAR") ?? -1;
+      if (seasons?.rowSet.some((row) => row[year] === seasonString(currentSeason()))) {
+        return CURRENT_SEASON_TTL_MS;
+      }
+
+      return Infinity;
+    },
+  });
+}
+
+app.get("/api/teamhistory", async (req, res) => {
+  const { team_id } = req.query;
+  if (!/^\d+$/.test(team_id ?? "") || !findTeamById(team_id)) {
+    return res.status(400).json({ error: "team_id must be the id of a current NBA team." });
+  }
+
+  const { TeamStats: rows = [] } = await teamHistory(team_id);
+  res.json({
+    team_id: Number(team_id),
+    seasons: rows.map((row) => ({
+      season: Number(row.YEAR.slice(0, 4)),
+      name: `${row.TEAM_CITY} ${row.TEAM_NAME}`,
+      gp: row.GP,
+      w: row.WINS,
+      l: row.LOSSES,
+      conf_rank: row.CONF_RANK || null,
+      div_rank: row.DIV_RANK || null,
+      po_w: row.PO_WINS,
+      po_l: row.PO_LOSSES,
+      finals: FINALS[row.NBA_FINALS_APPEARANCE] ?? null,
+    })),
+  });
+});
+
 // Caches everything a team's card asks for in a season. bin/load-fixtures
 // uses it to cache the fake teams under the same requests the routes make.
 export async function cacheTeam(teamId, season) {
+  await teamHistory(teamId);
   await leagueGames(season);
   await leagueDashTeamStats({ season });
   await teamShotChart(teamId, season);

@@ -117,6 +117,29 @@ describe("playback and the play-by-play", () => {
     page.click("#playButton");
   });
 
+  it("ranks the biggest plays by the win probability they swung", () => {
+    const rows = page.$$(".big-plays tbody tr");
+    assert.ok(rows.length > 0 && rows.length <= 8);
+    const swings = rows.map((row) => Number(row.cells[6].textContent));
+    assert.deepEqual(swings, [...swings].sort((a, b) => b - a));
+    assert.ok(swings.every((swing) => swing > 0));
+    for (const row of rows) {
+      const play = plays.find((p) => String(p.id) === row.dataset.play);
+      assert.ok(play.scored, "only baskets count");
+      assert.equal(row.cells[1].textContent, `${play.period_label} · ${play.clock}`);
+    }
+  });
+
+  it("jumps the court to a big play when it's clicked", async () => {
+    const row = page.$$(".big-plays tbody tr").find((r) => page.$(`#shotcharts .shot[data-play="${r.dataset.play}"]`));
+    const play = plays.find((p) => String(p.id) === row.dataset.play);
+    page.click(row.cells[3]);
+
+    await page.waitFor(() => page.$("#playClock").textContent === `${play.period_label} · ${play.clock}`, "the court to jump");
+    assert.ok(page.$(`#playbyplay tr[data-play="${play.id}"]`).classList.contains("current"));
+    assert.ok(page.tracked.some((e) => e.name === "play_seek" && e.data.source === "biggest_plays"));
+  });
+
   it("steps through the quarters with the arrow keys", () => {
     page.key("ArrowRight");
     assert.equal(page.hash().get("q"), "Q1");

@@ -2,13 +2,16 @@
 // handles the game's keyboard shortcuts and hovering, and loads the view in
 // the URL (or the last one seen).
 import { loadPref } from "./lib/prefs.js";
+import { showBigPlay } from "./ui/bigplays.js";
 import { rememberSection, sortStats } from "./ui/boxscore.js";
+import { cardSortClick } from "./ui/cardsort.js";
 import { highlightCardZone, outlineCardZone } from "./ui/cardzones.js";
 import { boxscoreEl, seasonSelect, teamSelect } from "./ui/dom.js";
 import { closePlayerMenu, gamePeriods, playerMenuChange, playerMenuClick, selectPeriod, showPeriod } from "./ui/filters.js";
 import { replayShot } from "./ui/flights.js";
 import { loadGames, loadInfo, loadSeasons, loadTeams } from "./ui/games.js";
 import { applyHash, cardClosed } from "./ui/hash.js";
+import { toggleLineups } from "./ui/lineups.js";
 import { clearPlayLinks, linkPlay, showPlayShot, togglePbp } from "./ui/pbp.js";
 import { cycleSpeed, playButton, togglePlayback } from "./ui/playback.js";
 import { openPlayerCard, playerCardChange, playerCardClick, playerDialog } from "./ui/playercard.js";
@@ -117,6 +120,9 @@ boxscoreEl.addEventListener("click", showPlayShot);
 boxscoreEl.addEventListener("click", togglePbp);
 boxscoreEl.addEventListener("click", openPlayerCard);
 boxscoreEl.addEventListener("click", openTeamCard);
+boxscoreEl.addEventListener("click", cardSortClick);
+boxscoreEl.addEventListener("click", toggleLineups);
+boxscoreEl.addEventListener("click", showBigPlay);
 playerDialog.addEventListener("click", playerCardClick);
 playerDialog.addEventListener("mouseover", outlineCardZone);
 playerDialog.addEventListener("mouseleave", () => highlightCardZone(playerDialog, null));

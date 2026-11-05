@@ -133,6 +133,14 @@ export function renderBoxScore(game, stats) {
         <summary><h2>Scoring runs</h2></summary>
         <div id="scoretrend" class="scoretrend"><p class="hint">Loading scoring runs…</p></div>
       </details>
+      <details class="game-section collapsible" data-section="bigplays"${openAttr("bigplays")}>
+        <summary><h2>Biggest plays</h2></summary>
+        <div id="bigplays"><p class="hint">Loading the plays…</p></div>
+      </details>
+      <details class="game-section collapsible" data-section="lineups"${openAttr("lineups")}>
+        <summary><h2>Lineups</h2></summary>
+        <div id="lineups"><p class="hint">Loading lineups…</p></div>
+      </details>
     </div>
   `;
 }
@@ -266,7 +274,8 @@ function renderStatHeaders(teamId) {
 // Clicking a header sorts that team's table by it; clicking again reverses.
 // Numbers start high-to-low, names A–Z.
 export function sortStats(event) {
-  const button = event.target.closest(".stats .sort");
+  // Tables with data-sort-table sort themselves (see cardsort.js).
+  const button = event.target.closest(".stats:not([data-sort-table]) .sort");
   if (!button) {
     return;
   }

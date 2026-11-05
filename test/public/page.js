@@ -32,6 +32,8 @@ function statsApi(fake, url) {
     if (params.get("SeasonType") === SeasonType.regular && params.get("Season") === seasonString(SEASON)) {
       body = fake.teamgamelog.get(Number(params.get("TeamID")));
     }
+  } else if (endpoint === "teamyearbyyearstats") {
+    body = fake.teamHistories.get(Number(params.get("TeamID")));
   } else if (endpoint === "leaguegamelog") {
     body = fake.leagueGameLog.get(Number(params.get("Season").slice(0, 4)));
   } else if (endpoint === "leaguedashteamstats") {

@@ -12,11 +12,12 @@ import { loadPref, savePref } from "../lib/prefs.js";
 const sorts = loadPref("cardSorts", {});
 
 // A header cell with a sort button. `text` columns read left to right and
-// start A–Z; `ascending` ones start low to high (like ranks, where 1st is
-// best). Other columns start high to low.
-export function sortHeader(label, { title = "", text = false, ascending = false } = {}) {
+// start A–Z, unless `descending` (for text that sorts by a number, high to
+// low); `ascending` ones start low to high (like ranks, where 1st is best).
+// Other columns start high to low.
+export function sortHeader(label, { title = "", text = false, ascending = false, descending = false } = {}) {
   let first = "desc";
-  if (text || ascending) {
+  if ((text && !descending) || ascending) {
     first = "asc";
   }
   const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";

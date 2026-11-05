@@ -32,6 +32,7 @@ describe("a game's page", () => {
       `/api/boxscore?game_id=${game.id}&date=${game.date}`,
       `/api/shotchart?game_id=${game.id}`,
       `/api/playbyplay?game_id=${game.id}`,
+      `/api/lineups?game_id=${game.id}`,
     ]);
     assert.equal(page.$("#teamSelect").selectedOptions[0].dataset.abbr, game.home);
     assert.equal(page.$("#seasonSelect").value, "2025");
@@ -89,6 +90,44 @@ describe("a game's page", () => {
 
   it("draws the scoring trend", () => {
     assert.ok(page.$("#scoretrend svg .trend-line"));
+  });
+
+  it("lists each team's lineups, most-used first, accounting for the whole game", async () => {
+    await page.waitFor(() => page.$(".lineups-table"), "the lineups");
+    const lineups = await page.api(`/api/lineups?game_id=${game.id}`);
+    const tables = page.$$("#lineups .team-lineups");
+    assert.equal(tables.length, 2);
+
+    for (const section of tables) {
+      const teamId = Number(section.dataset.team);
+      const units = lineups.teams[teamId];
+      const rows = [...section.querySelectorAll("tbody tr")];
+      assert.equal(rows.length, Math.min(units.length, 10));
+      const seconds = rows.map((row) => Number(row.cells[1].dataset.value));
+      assert.deepEqual(seconds, [...seconds].sort((a, b) => b - a));
+      // Every unit together played the whole game, and outscored the
+      // other team by the final margin.
+      const total = units.reduce((sum, u) => sum + u.seconds, 0);
+      const periods = page.$$(".linescore thead th").length - 2;
+      assert.ok(Math.abs(total - (2880 + (periods - 4) * 300)) < 1, `${total} seconds over ${periods} periods`);
+      const margin = units.reduce((sum, u) => sum + u.pts_for - u.pts_against, 0);
+      const own = teamId === box.game.home.id ? game.score.home - game.score.away : game.score.away - game.score.home;
+      assert.equal(margin, own);
+    }
+  });
+
+  it("shows every lineup on request, and sorts them", () => {
+    const button = page.$(".show-lineups");
+    const teamId = Number(button.dataset.team);
+    page.click(button);
+
+    const section = page.$(`.team-lineups[data-team="${teamId}"]`);
+    const net = () => [...section.querySelectorAll("tbody tr")].map((row) => Number(row.cells[4].textContent));
+    assert.match(page.$(`.show-lineups[data-team="${teamId}"]`).textContent, /Show fewer/);
+    assert.ok(net().length > 10);
+
+    page.click([...section.querySelectorAll("thead .sort")].find((b) => b.textContent === "+/-"));
+    assert.deepEqual(net(), [...net()].sort((a, b) => b - a));
   });
 
   it("filters the court and play-by-play to a quarter", async () => {

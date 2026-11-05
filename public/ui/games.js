@@ -3,9 +3,12 @@
 import { currentSeason, escapeHtml } from "../lib/format.js";
 import { getJson, setStatus } from "./api.js";
 import { renderBoxScore, trackScoreboardHeight } from "./boxscore.js";
+import { renderBigPlays } from "./bigplays.js";
+import { applyCardSorts } from "./cardsort.js";
 import { boxscoreEl, calendarHint, seasonSelect, teamSelect } from "./dom.js";
 import { fillPlayerMenu, refreshPeriodTabs } from "./filters.js";
 import { writeHash } from "./hash.js";
+import { renderLineups } from "./lineups.js";
 import { renderPlayByPlay } from "./pbp.js";
 import { stopPlayback } from "./playback.js";
 import { renderShotCharts, shotsByTeam } from "./shotchart.js";
@@ -228,8 +231,10 @@ export async function loadBoxScore(date, period = "all", players = []) {
     playByPlay = plays;
     refreshPeriodTabs();
     drawScoreTrend();
+    document.getElementById("bigplays").innerHTML = renderBigPlays();
     return renderPlayByPlay();
-  }, ["scoretrend"]);
+  }, ["scoretrend", "bigplays"]);
+  loadSection("lineups", `/api/lineups?game_id=${gameId}`, token, renderLineups);
 }
 
 // Renders a section from a request; on failure the error goes in it and in
@@ -240,6 +245,8 @@ async function loadSection(id, url, token, render, errorIds = []) {
     const data = await getJson(url);
     if (token === loadToken) {
       el.innerHTML = render(data);
+      // Sortable tables in it start in their remembered order.
+      applyCardSorts(el);
     }
   } catch (err) {
     if (token === loadToken) {

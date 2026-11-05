@@ -210,6 +210,66 @@ function gameLog(data) {
     </div>`;
 }
 
+// How far a season went in the playoffs: "Champion 16–5", "Finals 13–9",
+// a playoff record, or a dash for a season without playoffs.
+function playoffs(s) {
+  if (s.po_w + s.po_l === 0) {
+    return "–";
+  }
+  const record = `${s.po_w}–${s.po_l}`;
+  if (s.finals === "champion") {
+    return `Champion ${record}`;
+  }
+  if (s.finals === "finals") {
+    return `Finals ${record}`;
+  }
+  return record;
+}
+
+// Every season the franchise has played, newest first, and for one that has
+// moved or been renamed, what it was called (where that differs from
+// today's name). The card's season is marked.
+function historyTable(card) {
+  const { history } = card;
+  if (!history) {
+    return '<p class="hint">Loading the history…</p>';
+  }
+  if (history instanceof Error) {
+    return `<p class="notice">${escapeHtml(history.message)}</p>`;
+  }
+
+  const renamed = history.seasons.some((s) => s.name !== card.name);
+  let nameHeader = "";
+  if (renamed) {
+    nameHeader = sortHeader("Name", { text: true, title: "What the team was called, where it differs from today" });
+  }
+  const rows = [...history.seasons].reverse().map((s) => {
+    let name = "";
+    if (renamed) {
+      name = `<td class="text">${s.name === card.name ? "" : escapeHtml(s.name)}</td>`;
+    }
+    return `
+      <tr class="${s.season === card.season ? "picked" : ""}">
+        <th>${seasonLabel(s.season)}</th>
+        ${name}
+        <td>${s.w}</td>
+        <td>${s.l}</td>
+        <td>${percent(s.w, s.gp)}</td>
+        <td>${s.conf_rank ?? "–"}</td>
+        <td class="text" data-value="${s.po_w + s.po_l > 0 ? s.po_w : ""}">${playoffs(s)}</td>
+      </tr>`;
+  }).join("");
+  return `
+    <div class="table-wrap team-history">
+      <table class="stats team-history-table" data-sort-table="team-history">
+        <thead>
+          <tr>${sortHeader("Season")}${nameHeader}${sortHeader("W")}${sortHeader("L")}${sortHeader("Win%")}${sortHeader("Conf", { ascending: true, title: "Finish in its conference" })}${sortHeader("Playoffs", { text: true, descending: true, title: "Playoff record; sorts by playoff wins" })}</tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 function renderTeamCard() {
   if (!state.teamCard) {
     return;
@@ -247,6 +307,10 @@ function renderTeamCard() {
         <div class="card-zones-head"><h3>Hot/cold zones</h3></div>
         ${zonesBody(state.teamCard.zones, `${name}'s shooting by zone`, "team")}
       </section>
+      <section>
+        <h3>History</h3>
+        ${historyTable(state.teamCard)}
+      </section>
     </div>`;
   applyCardSorts(teamDialog);
   // The game on screen, scrolled into view in the game log.
@@ -281,6 +345,7 @@ export function showTeamCard(id, source) {
     data: null,
     error: null,
     zones: "loading",
+    history: null,
   };
   state.teamCard = card;
   track("team_card_open", { team_id: card.id, season: card.season, source });
@@ -305,6 +370,11 @@ async function loadTeamCard(card) {
       card.zones = zones;
     }, (err) => {
       card.zones = err;
+    }),
+    getJson(`/api/teamhistory?team_id=${card.id}`).then((history) => {
+      card.history = history;
+    }, (err) => {
+      card.history = err;
     }),
   ].map((loaded) => loaded.then(() => {
     if (card === state.teamCard) {

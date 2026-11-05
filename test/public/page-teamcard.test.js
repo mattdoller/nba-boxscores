@@ -33,7 +33,11 @@ describe("the team card", () => {
     await page.settle();
 
     const query = `team_id=${link.dataset.team}&season=${SEASON}`;
-    assert.deepEqual(page.requests.slice(requestsBefore).sort(), [`/api/team?${query}`, `/api/teamzones?${query}`]);
+    assert.deepEqual(page.requests.slice(requestsBefore).sort(), [
+      `/api/team?${query}`,
+      `/api/teamhistory?team_id=${link.dataset.team}`,
+      `/api/teamzones?${query}`,
+    ]);
     season = await page.api(`/api/team?${query}`);
   });
 
@@ -79,6 +83,21 @@ describe("the team card", () => {
     assert.deepEqual(page.$$("#teamDialog .zone-list tr.zone-hover").map((row) => row.dataset.zone), [zone]);
     dialog().dispatchEvent(new page.window.MouseEvent("mouseleave"));
     assert.equal(page.$$("#teamDialog .zone-list tr.zone-hover").length, 0);
+  });
+
+  it("shows the franchise's every season, newest first, marking this one", async () => {
+    await page.waitFor(() => page.$(".team-history-table"), "the history");
+    const history = await page.api(`/api/teamhistory?team_id=${season.team.id}`);
+    const rows = page.$$(".team-history-table tbody tr");
+
+    assert.deepEqual(rows.map((row) => Number.parseInt(row.cells[0].textContent)), history.seasons.map((s) => s.season).reverse());
+    assert.equal(Number.parseInt(page.$(".team-history-table tr.picked th").textContent), SEASON);
+    const champion = history.seasons.find((s) => s.finals === "champion");
+    if (champion) {
+      const row = rows.find((r) => Number.parseInt(r.cells[0].textContent) === champion.season);
+      const column = page.$$(".team-history-table thead th").findIndex((th) => th.textContent === "Playoffs");
+      assert.match(row.cells[column].textContent, /^Champion 16–\d+$/);
+    }
   });
 
   it("opens another of the team's games from the log", async () => {

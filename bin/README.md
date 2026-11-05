@@ -223,7 +223,9 @@ Each fake player also gets a career for their player card: up to four
 earlier seasons made from their profile, then the simulated one, with a
 shot chart for each. The league's team stats for those seasons, which the
 card shades stats against, come from the simulated games. So do the team
-cards' league game log and each team's season of shots.
+cards' league game log and each team's season of shots. Each team's
+history has made-up records and playoffs for the earlier seasons, and its
+record so far in the simulated one.
 
 The default 10 games per team (150 games) takes about half a minute and
 about 65 MB, careers included.

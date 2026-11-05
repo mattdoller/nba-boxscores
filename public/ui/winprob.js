@@ -56,12 +56,10 @@ export function favoredLabel(homeProb) {
   return `${state.currentGame[side].abbreviation} ${pctLabel(sideWinProb(homeProb, side))} to win`;
 }
 
-// Stretches of at most SWING_MAX_SECONDS that moved one team's win
-// probability by SWING_MIN or more, shaped like scoringRuns' runs (plus wpFrom/wpTo, the home team's chance
-// before and after) so the chart draws and hovers them the same way. Each
-// starts and ends with a basket by the team that gained; overlapping
-// candidates give way to bigger swings.
-export function momentumSwings() {
+// Every scoring play with the home team's chance of winning just before and
+// just after it, at the moment it happened: { play, side (who scored), from
+// (the score before), t, wpBefore, wpAfter }.
+function scoringPlays() {
   const plays = [];
   let before = { away: 0, home: 0 };
   let ball = null;
@@ -90,6 +88,28 @@ export function momentumSwings() {
     before = play.score;
     ball = ballSide(play);
   }
+  return plays;
+}
+
+// The plays that moved the scoring team's chance of winning the most, by
+// how much (`gain`, 0–1), biggest first.
+export function biggestPlays(count) {
+  return scoringPlays()
+    .map((entry) => ({
+      ...entry,
+      gain: sideWinProb(entry.wpAfter, entry.side) - sideWinProb(entry.wpBefore, entry.side),
+    }))
+    .sort((a, b) => b.gain - a.gain || a.t - b.t)
+    .slice(0, count);
+}
+
+// Stretches of at most SWING_MAX_SECONDS that moved one team's win
+// probability by SWING_MIN or more, shaped like scoringRuns' runs (plus wpFrom/wpTo, the home team's chance
+// before and after) so the chart draws and hovers them the same way. Each
+// starts and ends with a basket by the team that gained; overlapping
+// candidates give way to bigger swings.
+export function momentumSwings() {
+  const plays = scoringPlays();
 
   const candidates = [];
   plays.forEach((first, i) => {

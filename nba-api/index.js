@@ -13,3 +13,4 @@ export { shotChartDetail } from "./endpoints/shotchartdetail.js";
 export { playerCareerStats } from "./endpoints/playercareerstats.js";
 export { leagueDashTeamStats } from "./endpoints/leaguedashteamstats.js";
 export { leagueGameLog } from "./endpoints/leaguegamelog.js";
+export { teamYearByYearStats } from "./endpoints/teamyearbyyearstats.js";

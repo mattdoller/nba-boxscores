@@ -747,6 +747,38 @@ describe("API", () => {
     });
   });
 
+  describe("GET /api/teamhistory", () => {
+    it("rejects an unknown team", async () => {
+      assert.equal((await get("/api/teamhistory?team_id=1")).status, 400);
+    });
+
+    it("lists every season, with its name, record, finish, and playoffs", async (t) => {
+      const season = (year, city, name, w, l, conf, poW, poL, finals) => ({
+        TEAM_ID: LAKERS_ID, TEAM_CITY: city, TEAM_NAME: name, YEAR: year, GP: w + l, WINS: w, LOSSES: l,
+        CONF_RANK: conf, DIV_RANK: 1, PO_WINS: poW, PO_LOSSES: poL, NBA_FINALS_APPEARANCE: finals,
+      });
+      const calls = stubStatsApi(t, {
+        teamyearbyyearstats: resultSets({
+          TeamStats: [
+            season("1959-60", "Minneapolis", "Lakers", 25, 50, 0, 5, 4, "N/A"),
+            season("2019-20", "Los Angeles", "Lakers", 52, 19, 1, 16, 5, "LEAGUE CHAMPION"),
+            season("2021-22", "Los Angeles", "Lakers", 33, 49, 11, 0, 0, "N/A"),
+          ],
+        }),
+      });
+
+      const { status, body } = await get(`/api/teamhistory?team_id=${LAKERS_ID}`);
+
+      assert.equal(status, 200);
+      assert.equal(calls[0].params.TeamID, String(LAKERS_ID));
+      assert.deepEqual(body.seasons.map((s) => [s.season, s.name, s.w, s.l, s.conf_rank, s.po_w, s.finals]), [
+        [1959, "Minneapolis Lakers", 25, 50, null, 5, null],
+        [2019, "Los Angeles Lakers", 52, 19, 1, 16, "champion"],
+        [2021, "Los Angeles Lakers", 33, 49, 11, 0, null],
+      ]);
+    });
+  });
+
   describe("GET /api/teamzones", () => {
     it("adds up the team's season of shots and the league's by zone", async (t) => {
       const calls = stubStatsApi(t, {
