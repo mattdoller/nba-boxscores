@@ -10,7 +10,7 @@ import { loadGames, loadInfo, loadSeasons, loadTeams } from "./ui/games.js";
 import { applyHash } from "./ui/hash.js";
 import { clearPlayLinks, linkPlay, showPlayShot, togglePbp } from "./ui/pbp.js";
 import { cycleSpeed, playButton, togglePlayback } from "./ui/playback.js";
-import { openPlayerCard, outlineCardZone, playerCardChange, playerCardClick, playerDialog } from "./ui/playercard.js";
+import { highlightCardZone, openPlayerCard, outlineCardZone, playerCardChange, playerCardClick, playerDialog } from "./ui/playercard.js";
 import { showShotTooltip, toggleCourtTrend } from "./ui/shotchart.js";
 import { state } from "./ui/state.js";
 // Sets up the day/night and control panel switches.
@@ -116,7 +116,7 @@ boxscoreEl.addEventListener("click", togglePbp);
 boxscoreEl.addEventListener("click", openPlayerCard);
 playerDialog.addEventListener("click", playerCardClick);
 playerDialog.addEventListener("mouseover", outlineCardZone);
-playerDialog.addEventListener("mouseleave", () => outlineZone(playerDialog.querySelector(".card-court"), null));
+playerDialog.addEventListener("mouseleave", () => highlightCardZone(null));
 playerDialog.addEventListener("change", playerCardChange);
 playerDialog.addEventListener("close", () => {
   state.playerCard = null;

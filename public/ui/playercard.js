@@ -553,7 +553,16 @@ export async function openPlayerCard(event) {
 // list, is hovered.
 export function outlineCardZone(event) {
   const hovered = event.target.closest(".card-court .zone, .zone-list tr[data-zone]");
-  outlineZone(playerDialog.querySelector(".card-court"), hovered?.dataset.zone);
+  highlightCardZone(hovered?.dataset.zone);
+}
+
+// Marks a zone on the card both ways: outlined on the court, and its row
+// highlighted in the zone list. No zone clears both.
+export function highlightCardZone(zone) {
+  outlineZone(playerDialog.querySelector(".card-court"), zone);
+  for (const row of playerDialog.querySelectorAll(".zone-list tr[data-zone]")) {
+    row.classList.toggle("zone-hover", row.dataset.zone === zone);
+  }
 }
 
 export function playerCardClick(event) {

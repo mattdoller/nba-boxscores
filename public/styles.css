@@ -665,6 +665,11 @@ table .col-hover {
   background: var(--hover);
 }
 
+/* A zone list row whose zone is hovered on the card's court. */
+.zone-list tr.zone-hover > * {
+  background: var(--hover);
+}
+
 table tbody tr:hover > .col-hover {
   background: var(--hover-cross);
 }
