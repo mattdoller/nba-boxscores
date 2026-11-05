@@ -31,6 +31,9 @@ Chrome. Writes to images/:
   biggest-plays.png        the game's biggest plays
   player-card.png          a player's card
   team-card.png            a team's card
+  app-tour.gif             the whole app mid-game with the zones on: the
+                           team's card and its zones hovered, then down to
+                           the box scores and a player's card, the same
 
 The fake season, the server, and Chrome's profile live in a temporary
 folder that's deleted when it's done, whether or not it succeeds.
@@ -212,11 +215,17 @@ const MID_THIRD_SECONDS = 2 * 720 + 360;
 // it's done.
 const MAX_PLAYBACK_MS = 60_000;
 
-// A cursor drawn over the page for the animations: __cursor.click(selector)
-// glides it in to an element, shows a click there, clicks it, and fades it
-// out. It's only a picture; the real mouse never moves, so nothing on the
-// page reacts to it but the click itself. playbackShare() is how far the
-// playback has got, from the quarter tabs' clock (0 to 1), for timing it.
+// A cursor drawn over the page for the animations. It's only a picture;
+// the real mouse never moves, so nothing on the page reacts to it but what
+// it's asked to do:
+//   __cursor.click(selector, { stay })  glides to an element (in from below
+//     and to the left if it's hidden), shows a click there, and clicks it;
+//     then fades out, unless `stay`
+//   __cursor.moveTo(x, y)               glides to a point on the screen
+//   __cursor.hide()                     fades it out
+// For a hover, the script moves the real mouse to where the cursor ends up
+// (see hover in main). playbackShare() is how far the playback has got,
+// from the quarter tabs' clock (0 to 1), for timing it.
 const CURSOR = `(() => {
   if (window.__cursor) {
     return;
@@ -226,48 +235,110 @@ const CURSOR = `(() => {
   // its tip is at (7, 4).
   arrow.innerHTML = '<svg width="42" height="42" viewBox="0 0 30 30"><path d="M5 3 L5 24 L10.5 19 L14.5 27.5 L18.5 25.8 L14.6 17.5 L22 17.5 Z" fill="#111" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>';
   Object.assign(arrow.style, {
-    position: "fixed", left: "0", top: "0", zIndex: "2147483647", pointerEvents: "none",
+    position: "fixed", left: "0", top: "0", pointerEvents: "none",
     opacity: "0", transformOrigin: "7px 4px",
   });
-  document.body.append(arrow);
+  // The cards are modal dialogs, which the browser draws in its top layer,
+  // over everything however high its z-index. So the cursor is drawn there
+  // too, as a popover covering the screen, and opened again before each
+  // move to put it back on top of any card opened since.
+  const layer = document.createElement("div");
+  layer.popover = "manual";
+  Object.assign(layer.style, {
+    position: "fixed", inset: "0", width: "100vw", height: "100vh", margin: "0", padding: "0",
+    border: "0", background: "transparent", overflow: "visible", pointerEvents: "none",
+  });
+  layer.append(arrow);
+  document.body.append(layer);
+  const raise = () => {
+    if (layer.matches(":popover-open")) {
+      layer.hidePopover();
+    }
+    layer.showPopover();
+  };
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  let at = null;
   const place = (x, y, scale = 1) => {
+    at = { x, y };
     arrow.style.transform = "translate(" + (x - 7) + "px, " + (y - 4) + "px) scale(" + scale + ")";
   };
-  window.__cursor = {
-    async click(selector) {
-      const target = document.querySelector(selector);
-      const r = target.getBoundingClientRect();
-      const x = r.x + r.width / 2;
-      const y = r.y + r.height / 2;
+  const glide = async (x, y, ms = 900) => {
+    raise();
+    if (!at) {
       // In from below and to the left, where the page is quiet.
       arrow.style.transition = "none";
       place(x - 170, y + 110);
       arrow.getBoundingClientRect();
-      arrow.style.transition = "transform 0.9s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.25s";
-      arrow.style.opacity = "1";
-      place(x, y);
-      await wait(1100);
+    }
+    arrow.style.transition = "transform " + ms + "ms cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.25s";
+    arrow.style.opacity = "1";
+    place(x, y);
+    await wait(ms + 150);
+  };
+  window.__cursor = {
+    async click(selector, { stay = false } = {}) {
+      const target = document.querySelector(selector);
+      const r = target.getBoundingClientRect();
+      const x = r.x + r.width / 2;
+      const y = r.y + r.height / 2;
+      await glide(x, y);
       // The press: the arrow dips, a ring spreads from the spot, and the
-      // checkbox takes the click.
+      // element takes the click.
       arrow.style.transition = "transform 0.12s, opacity 0.25s";
       place(x, y, 0.82);
       const ring = document.createElement("div");
       Object.assign(ring.style, {
         position: "fixed", left: (x - 18) + "px", top: (y - 18) + "px", width: "36px", height: "36px",
-        borderRadius: "50%", border: "3px solid #fa5252", zIndex: "2147483646", pointerEvents: "none",
+        borderRadius: "50%", border: "3px solid #fa5252", pointerEvents: "none",
       });
-      document.body.append(ring);
+      layer.prepend(ring);
       ring.animate([{ transform: "scale(0.3)", opacity: 1 }, { transform: "scale(1.6)", opacity: 0 }], { duration: 650, easing: "ease-out" })
         .finished.then(() => ring.remove());
       await wait(120);
       target.click();
       place(x, y);
       await wait(900);
+      if (!stay) {
+        await this.hide();
+      }
+    },
+    async moveTo(x, y, ms = 800) {
+      await glide(x, y, ms);
+    },
+    async hide() {
+      if (!at) {
+        return;
+      }
       arrow.style.transition = "transform 0.6s ease-in, opacity 0.6s";
       arrow.style.opacity = "0";
-      place(x + 60, y + 50);
+      place(at.x + 60, at.y + 50);
+      at = null;
     },
+  };
+  // A point inside a zone on a court as the screen shows it, where the zone
+  // itself is on top: the middle of the part of it in view.
+  window.zonePoint = (court, zone) => {
+    const shapes = [...document.querySelectorAll(court + ' .zone[data-zone="' + zone + '"]')];
+    const hits = [];
+    for (const shape of shapes) {
+      const r = shape.getBoundingClientRect();
+      for (let i = 1; i < 16; i++) {
+        for (let j = 1; j < 16; j++) {
+          const x = r.x + (r.width * i) / 16;
+          const y = r.y + (r.height * j) / 16;
+          if (y > 0 && y < innerHeight && document.elementFromPoint(x, y) === shape) {
+            hits.push([x, y]);
+          }
+        }
+      }
+    }
+    if (hits.length === 0) {
+      return null;
+    }
+    const x = hits.reduce((sum, [hx]) => sum + hx, 0) / hits.length;
+    const y = hits.reduce((sum, [, hy]) => sum + hy, 0) / hits.length;
+    // The average can land outside a curved zone; take the nearest hit.
+    return hits.reduce((best, p) => (Math.hypot(p[0] - x, p[1] - y) < Math.hypot(best[0] - x, best[1] - y) ? p : best));
   };
   window.playbackShare = () => {
     const periods = document.querySelectorAll("#periodTabs button:not([data-period=all])").length;
@@ -561,6 +632,87 @@ async function main() {
     }
     // Hold on the finished chart for a moment.
     await sleep(1500);
+  });
+  // The tour: the whole app, the control panel folded away, mid-game with
+  // the zones on. The cursor opens the team's card, scrolls to its zones,
+  // and hovers over a few; closes it, scrolls down to the box scores, and
+  // does the same with a player's card.
+  await reopen();
+  await waitFor("Boolean(document.querySelector('.shotchart .shot') && document.querySelector('#playbyplay tr[data-play]'))", "the game");
+  await settle();
+  await evaluate("scrollTo(0, 0)");
+  if (await evaluate("document.documentElement.dataset.panel !== 'collapsed'")) {
+    await click("#panelToggle");
+  }
+  if (await evaluate("document.getElementById('playbyplay').hidden")) {
+    await click("#pbpToggle");
+  }
+  if (!(await evaluate("document.getElementById('zonesToggle').checked"))) {
+    await click("#zonesToggle");
+  }
+  await waitFor("document.querySelectorAll('#shotcharts .zone').length > 0", "the zones");
+  await click(`#playbyplay tr[data-play="${midThird}"] .play`);
+  await waitFor("/^Q3/.test(document.getElementById('playClock').textContent)", "the court to jump to the third quarter");
+  await sleep(1500);
+  await evaluate(CURSOR);
+
+  // Hovers over zones on a card's court: the cursor glides to each, and the
+  // real mouse follows, so the page outlines the zone and marks its row.
+  const TOUR_ZONES = ["Restricted Area|Center(C)", "Above the Break 3|Center(C)", "Left Corner 3|Left Side(L)", "Mid-Range|Right Side(R)"];
+  const hover = async (court) => {
+    for (const zone of TOUR_ZONES) {
+      const point = await evaluate(`zonePoint(${JSON.stringify(court)}, ${JSON.stringify(zone)})`);
+      if (!point) {
+        continue;
+      }
+      await evaluate(`__cursor.moveTo(${point[0]}, ${point[1]})`);
+      await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point[0], y: point[1] });
+      await sleep(1000);
+    }
+    // The real mouse off to the folded panel, so nothing under it stays
+    // hovered once the card closes.
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 4, y: HEIGHT - 4 });
+  };
+  // Scrolls a card down to its zones, smoothly, as a user would.
+  const scrollCardToZones = async (dialog) => {
+    await evaluate(`(() => {
+      const d = document.querySelector(${JSON.stringify(dialog)});
+      const zones = d.querySelector(".card-zones");
+      const top = zones.getBoundingClientRect().top - d.getBoundingClientRect().top + d.scrollTop - 16;
+      d.scrollTo({ top, behavior: "smooth" });
+    })()`);
+    await sleep(1400);
+  };
+  const cardReady = {
+    team: "Boolean(document.querySelector('.team-game-log') && document.querySelector('#teamDialog .card-court .zone') && !/Loading/.test(document.querySelector('#teamDialog .card-zones').textContent))",
+    player: "Boolean(document.querySelector('#playerDialog .season-game-log') && document.querySelector('#playerDialog .career td[style]') && !/Loading/.test(document.querySelector('#playerDialog .card-zones').textContent))",
+  };
+
+  await record("app-tour.gif", { x: 0, y: 0, width: WIDTH, height: HEIGHT }, async () => {
+    await sleep(1500);
+    await evaluate(`__cursor.click('.team-link[data-team="${picked.id}"]', { stay: true })`);
+    await waitFor(cardReady.team, "the team card");
+    await sleep(900);
+    await scrollCardToZones("#teamDialog");
+    await hover("#teamDialog .card-court");
+    await evaluate("__cursor.click('#teamDialog .player-card-close', { stay: true })");
+    await waitFor("!location.hash.includes('card=')", "the team card to close");
+    await sleep(500);
+    // Down to the team's box score, just under the scoreboard and quarter
+    // bar pinned at the top.
+    await evaluate(`(() => {
+      const table = document.querySelector('.team-stats[data-team="${picked.id}"]');
+      const pinned = document.querySelector(".period-bar").getBoundingClientRect().bottom;
+      scrollTo({ top: table.getBoundingClientRect().top + scrollY - pinned - 12, behavior: "smooth" });
+    })()`);
+    await sleep(1600);
+    await evaluate(`__cursor.click('.player-link[data-player="${player}"]', { stay: true })`);
+    await waitFor(cardReady.player, "the player card");
+    await sleep(900);
+    await scrollCardToZones("#playerDialog");
+    await hover("#playerDialog .card-court");
+    await evaluate("__cursor.hide()");
+    await sleep(1200);
   });
   cdp.close();
 

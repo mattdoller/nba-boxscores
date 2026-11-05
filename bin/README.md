@@ -310,18 +310,21 @@ Takes the screenshots in `images/`, on made-up data:
 | `biggest-plays.png` | The game's biggest plays |
 | `player-card.png` | A player's card: season so far, career, and zones |
 | `team-card.png` | The team's card |
+| `app-tour.gif` | The whole app mid-game with the zones on: the cursor opens the team's card and hovers over its zones, then scrolls down to the box scores and does the same with a player's card |
 
 It makes a fake season with `bin/load-fixtures`, serves it with the real
 server (offline), opens the team's last home game in headless Chrome, and
 captures each part of the page: still images at twice the screen's
 resolution, and the animations frame by frame, made into GIFs with
-ffmpeg. The cursor in the animations is drawn on the page; the real mouse
-never moves, so only its click does anything. The fake season, the server, and Chrome's profile all live in a
+ffmpeg. The cursor in the animations is drawn on the page. For a click,
+it clicks the element; for a hover, the real mouse moves to the same spot,
+so the page outlines the zone under it. The fake season, the server, and Chrome's profile all live in a
 temporary folder that's deleted at the end, whether or not it succeeds.
 
 - **It needs** Google Chrome or Chromium (or `CHROME` set to one) and
   ffmpeg.
-- **It takes about a minute**, most of it making the fake season.
+- **It takes about two and a half minutes**: half a minute making the
+  fake season, the rest recording the animations.
 - **The same options make the same fake game**, so rerunning only
   changes the still images when the app's look does. The animations'
   frames depend on timing, so they differ a little from run to run.
