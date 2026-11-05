@@ -77,6 +77,31 @@ describe("sendApiRequest", () => {
     assert.deepEqual(calls.map((c) => c.params.GameID), ["1", "2"]);
   });
 
+  it("shares a request that's already on its way", async (t) => {
+    const calls = stubStatsApi(t, { shared: { rows: [1, 2] } });
+
+    const [first, second] = await Promise.all([
+      sendApiRequest("shared", { GameID: "1" }),
+      sendApiRequest("shared", { GameID: "1" }),
+    ]);
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(first, { rows: [1, 2] });
+    assert.deepEqual(second, { rows: [1, 2] });
+    assert.notEqual(first, second, "each caller gets its own copy");
+  });
+
+  it("shares a failure, then sends the request again next time", async (t) => {
+    const calls = stubStatsApi(t, { sharedMissing: () => new Response("", { status: 400 }) });
+
+    const results = await Promise.allSettled([sendApiRequest("sharedMissing"), sendApiRequest("sharedMissing")]);
+
+    assert.deepEqual(results.map((r) => r.reason?.status), [400, 400]);
+    assert.equal(calls.length, 1);
+    await assert.rejects(sendApiRequest("sharedMissing"), { status: 400 });
+    assert.equal(calls.length, 2);
+  });
+
   it("refetches once the TTL passes", async (t) => {
     const calls = stubStatsApi(t, { expiring: { ok: true } });
 

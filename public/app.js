@@ -180,6 +180,6 @@ if (!location.hash) {
   }
 }
 Promise.all([
-  loadTeams(), 
-  loadInfo()
+  loadTeams(),
+  loadInfo(),
 ]).then(applyHash);

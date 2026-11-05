@@ -21,9 +21,3 @@ they're tested through the pure modules they import from `public/lib/`.
     the hot/cold zones against the league.
   - A player's game log for the season, with trends (points, shooting,
     minutes) across it.
-
-## Efficiency
-
-- [ ] Share in-flight requests in `sendApiRequest`. Opening a game makes
-      `/api/shotchart` and `/api/playbyplay` both fetch the same play-by-play
-      before either is cached.

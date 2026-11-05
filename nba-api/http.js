@@ -58,6 +58,11 @@ export function setOffline(reason) {
   offlineReason = reason;
 }
 
+// Requests on their way to stats.nba.com, by cache key. Opening a game sends
+// the same play-by-play request from two routes at once; the second waits
+// for the first instead of sending its own.
+const inFlight = new Map();
+
 // Throttling, timeouts, unreachable hosts, and server errors are often
 // gone a moment later; other client errors won't change on a retry.
 function isRetryable(err) {
@@ -68,7 +73,9 @@ function isRetryable(err) {
 // and undefined parameters are dropped while empty strings are sent as-is.
 // Responses are cached in SQLite for ttlMs (forever when omitted), which can
 // also be a function of the response's JSON returning the TTL. A failure that
-// may be temporary is retried once after retryDelayMs.
+// may be temporary is retried once after retryDelayMs. A request already on
+// its way is shared rather than sent again; whoever sent it first sets the
+// TTL, and the others get their own copy of the JSON.
 export async function sendApiRequest(endpoint, parameters = {}, options = {}) {
   const {
     ttlMs = Infinity,
@@ -91,7 +98,20 @@ export async function sendApiRequest(endpoint, parameters = {}, options = {}) {
   if (offlineReason) {
     throw new StatsApiError(404, offlineReason);
   }
+  if (inFlight.has(cacheKey)) {
+    return structuredClone(await inFlight.get(cacheKey));
+  }
 
+  const request = fetchAndCache(url, endpoint, cacheKey, { headers, timeoutMs, retryDelayMs, ttlMs });
+  inFlight.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    inFlight.delete(cacheKey);
+  }
+}
+
+async function fetchAndCache(url, endpoint, cacheKey, { headers, timeoutMs, retryDelayMs, ttlMs }) {
   let json;
   try {
     json = await fetchJson(url, endpoint, { headers, timeoutMs });
