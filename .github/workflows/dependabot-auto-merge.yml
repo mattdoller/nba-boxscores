@@ -1,0 +1,31 @@
+# Queues Dependabot's patch and minor updates to merge once CI passes, so
+# they don't wait on a click. Major updates, which can change behavior, are
+# left for a person to review.
+#
+# GitHub does the merging (auto-merge), and only after the checks the main
+# branch's ruleset requires have passed, so this needs both:
+#   - Settings > General > "Allow auto-merge"
+#   - a ruleset on main requiring the CI job ("check") to pass
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      # What the update is: for a group of updates, the biggest one in it.
+      - id: metadata
+        uses: dependabot/fetch-metadata@v3
+
+      - name: Merge when CI passes
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
