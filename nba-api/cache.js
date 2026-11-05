@@ -48,6 +48,12 @@ export function getCached(url) {
 
 export const cachePath = DB_PATH;
 
+// The cache's database, for the app's index of cached games
+// (season-index.js), which lives beside the responses.
+export function database() {
+  return db;
+}
+
 // Per-endpoint counts, sizes, and fetch times, for bin/cache.
 export function cacheStats() {
   return db.prepare(`
@@ -126,6 +132,16 @@ export function seasonsWithGames() {
     WHERE endpoint = 'teamgamelog' AND json_array_length(body, '$.resultSets[0].rowSet') > 0
     ORDER BY season DESC
   `).all().map((row) => row.season);
+}
+
+// The ids of the games with a cached box score, oldest first.
+export function cachedGameIds() {
+  return db.prepare(`
+    SELECT DISTINCT substr(url, instr(url, 'GameID=') + 7, 10) AS game_id
+    FROM responses
+    WHERE endpoint = 'boxscoretraditionalv3'
+    ORDER BY game_id
+  `).all().map((row) => row.game_id);
 }
 
 // Marks the cache as holding fake games from bin/load-fixtures, so the app

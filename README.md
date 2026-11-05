@@ -28,11 +28,15 @@ SQLite so a game is only ever fetched once.
   substitutions.
 - **Filters**: any quarter, and any set of players, for the charts and
   play-by-play.
+- **Player search**: type a name in the control panel to find anyone who
+  has played in the league, current or retired, and open their card.
 - **Player cards**: clicking a name in a box score opens the player's
+  season so far, up to the game on screen: their averages, a trend across
+  their games, and their game log (click a game to open it). Then their
   regular-season career, per game or in totals, with every stat a click
   away, and each stat shaded against the league that season. Below it are
-  their hot/cold zones for any season from 1996–97 on, on a half court seen
-  from above.
+  their hot/cold zones for the season so far or any season from 1996–97
+  on, on a half court seen from above.
 - **Team cards**: clicking a team's name on the scoreboard opens its
   regular season: its record (and where it stood after the game on
   screen), each stat ranked against the other 29 teams and shaded against
@@ -83,6 +87,7 @@ script does under the hood, and what to watch out for.
 | `bin/lint` | Checks style and likely mistakes with ESLint (`--fix` to fix what it can) |
 | `bin/cache` | Shows the cache's size by endpoint (`--stats`), deletes expired responses (`--prune`), a season (`--prune-season`), or everything (`--clear`); `--cache-db` picks the file |
 | `bin/backfill` | Fetches and caches every game in a finished season, one request every 2 seconds (`--season`, `--delay`) |
+| `bin/index` | Adds the games already in the cache to the season index the player cards read (`--season`, `--rebuild`, `--cache-db`) |
 | `bin/load-fixtures` | Fills a separate cache with a fake season to try the app on (`--games`, `--seed`, `--season`, `--reset`) |
 
 ## Trying it with fake data
@@ -112,10 +117,16 @@ To serve only what's cached from the real cache too, start the server with
 
 - **`server.js`** is an Express app serving `public/` and a small JSON API
   (`/api/teams`, `/api/games`, `/api/boxscore`, `/api/playbyplay`,
-  `/api/shotchart`, `/api/shotzones`, `/api/player`, `/api/playerzones`,
+  `/api/shotchart`, `/api/shotzones`, `/api/players`, `/api/player`,
+  `/api/playerseason`, `/api/playerzones`,
   `/api/lineups`, `/api/team`, `/api/teamzones`, `/api/teamhistory`, `/api/league`,
   `/api/info`). A player card gets the league totals for its
   whole career from `/api/league` in one request.
+- **`season-index.js`** keeps an index of the cached games beside the
+  responses: one row per game, per player per game, and per shot. A
+  player's season up to any date is then one query (`/api/playerseason`),
+  instead of parsing every game their team played. Final regular-season
+  games join it as they're cached; `bin/index` adds games cached before.
 - **`nba-api/`** is a JavaScript port of the parts of nba_api this app uses:
   the stats.nba.com endpoints, their parameters, and the headers the site
   expects. Responses are cached in SQLite by request URL (`nba-api/cache.js`):
@@ -137,55 +148,5 @@ To serve only what's cached from the real cache too, start the server with
 stats.nba.com has no published rate limit and sometimes stalls requests that
 come too fast, so failed requests are retried once, and `bin/backfill`
 spaces its requests out.
-
-## Next up: season player cards
-
-The player card shows a career season by season, from stats.nba.com's
-career and shot chart endpoints. Next is a card for the season up to the
-game on screen, built from the cached games instead: averages and totals,
-shooting splits, a game log with trends, and a shot chart with hot/cold
-zones against the league, all as of that date.
-
-Almost everything it needs is already cached once a season is backfilled:
-
-- **Box scores** have every player's line for every game, by player id.
-- **Shot charts** have every shot with its player, location, zone, and
-  result.
-- **Game logs** give each game's date, so "up to this game" is a date
-  filter.
-
-What's missing is a way to look across games. The cache holds one JSON
-response per request, so a season for one player means parsing every game
-their team played, and a player traded mid-season played for two teams.
-
-The plan:
-
-1. **Build an index from the cache**: new SQLite tables beside the cached
-   responses.
-   - `games`: id, date, season, season type, home and away teams.
-   - `player_games`: one row per player per game, with their stats.
-   - `shots`: one row per shot, with player, game, location, zone, and
-     result.
-
-   A script fills them from what's already cached, and new final games are
-   added as they're cached. A card is then one query, and "up to this game"
-   is `WHERE date <= ?`. Keying rows by player handles trades.
-2. **Send player ids with box scores.** `playerStats()` in `server.js` drops
-   them today; the page needs them to link a player to their card.
-3. **Add `/api/player`**: by player id and season, with an optional date to
-   stop at.
-4. **Add the card to the page**, opened from a player's name in the box
-   score.
-
-Details to get right:
-
-- Add up makes and attempts, then work out percentages; don't average each
-  game's percentage. Minutes come as `"34:12"` and need converting first.
-- Work out league averages by zone from the indexed shots rather than the
-  cached snapshot each shot chart carries. They're then accurate to any
-  date, and stay current during a season (the cached ones are frozen when a
-  game is first fetched).
-- `bin/backfill` only fetches finished seasons. Cards for the season in
-  progress need it to fetch the season's finished games so far, too.
 
 More ideas and smaller fixes are in [todo.md](todo.md).

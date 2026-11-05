@@ -4,6 +4,7 @@ import {
   SeasonType,
   boxScoreSummaryV3,
   boxScoreTraditionalV3,
+  commonAllPlayers,
   findTeamById,
   getTeams,
   leagueDashTeamStats,
@@ -20,6 +21,7 @@ import {
 } from "./nba-api/index.js";
 import { hasFixtures, seasonsWithGames } from "./nba-api/cache.js";
 import { gameLineups } from "./lineups.js";
+import { gamesThrough, indexGame, isIndexed, playerGames, zonesThrough } from "./season-index.js";
 import { currentSeason, periodLabel } from "./public/lib/format.js";
 import { teamColors } from "./team-colors.js";
 
@@ -485,6 +487,16 @@ app.get("/api/shotchart", requireGameId, async (req, res) => {
     });
   }
   res.json(byTeam);
+  // A game's page has now cached all of it, so a final one can join the
+  // season index, without holding up the response.
+  // Offline, a response that isn't cached just means the game waits.
+  if (!isIndexed(game_id)) {
+    indexCachedGame(game_id).catch((err) => {
+      if (err.status !== 404) {
+        console.error(`Indexing ${game_id}: ${err.message}`);
+      }
+    });
+  }
 });
 
 // Fetches and caches everything a game's page asks for, with the same
@@ -499,7 +511,97 @@ export async function cacheGame(gameId) {
     playByPlayV3({ gameId }, options),
     gameShotChart(gameId, options),
   ]);
+  await indexCachedGame(gameId);
 }
+
+// Adds a game to the season index (see season-index.js) from its responses,
+// which are cached by now (or fetched if not), when it's a final
+// regular-season game. Returns whether it was indexed.
+export async function indexCachedGame(gameId) {
+  if (seasonTypeFromGameId(gameId) !== SeasonType.regular) {
+    return false;
+  }
+  const summary = await boxScoreSummaryV3({ gameId }, { ttlMs: summaryTtl });
+  const info = summary.GameSummary?.[0];
+  if (!info?.gameEt || isLive(info.gameStatus)) {
+    return false;
+  }
+
+  const options = gameCacheOptions(summary);
+  const [{ PlayerStats, TeamStats }, { Shot_Chart_Detail = [] }] = await Promise.all([
+    boxScoreTraditionalV3({ gameId }, options),
+    gameShotChart(gameId, options),
+  ]);
+  if (PlayerStats.length === 0 || TeamStats.length < 2) {
+    return false;
+  }
+  indexGame({
+    gameId,
+    season: seasonFromGameId(gameId),
+    date: info.gameEt.slice(0, 10),
+    players: PlayerStats,
+    teams: TeamStats,
+    shots: Shot_Chart_Detail.map((row) => ({
+      player_id: row.PLAYER_ID,
+      team_id: row.TEAM_ID,
+      zone: shotZone(row),
+      made: row.SHOT_MADE_FLAG === 1,
+    })),
+  });
+  return true;
+}
+
+// A player's regular season through a date, from the season index: every
+// game they played by then, oldest first, with its opponent and score,
+// their totals, and their shooting by zone with the league's over the same
+// games. `through` is a date, or the whole season when it's left out. Only
+// games in the cache count; `league_games` says how many there are, which is
+// every game played by then once a season is backfilled.
+app.get("/api/playerseason", requirePlayerId, (req, res) => {
+  const playerId = Number(req.query.player_id);
+  const season = Number(req.query.season);
+  if (!/^\d{4}$/.test(req.query.season ?? "") || season > currentSeason()) {
+    return res.status(400).json({ error: `season must be a year no later than ${currentSeason()}.` });
+  }
+  const through = req.query.through ?? null;
+  if (through !== null && !/^\d{4}-\d{2}-\d{2}$/.test(through)) {
+    return res.status(400).json({ error: "through must be a date like 2025-01-31." });
+  }
+
+  const rows = playerGames(playerId, season, through);
+  const games = rows.map((row) => {
+    const home = row.team_id === row.home_id;
+    const own = home ? row.home_pts : row.away_pts;
+    const theirs = home ? row.away_pts : row.home_pts;
+    return {
+      game_id: row.game_id,
+      date: row.date,
+      team: findTeamById(row.team_id)?.abbreviation ?? null,
+      opponent: findTeamById(home ? row.away_id : row.home_id)?.abbreviation ?? null,
+      home,
+      result: own > theirs ? "W" : "L",
+      team_pts: own,
+      opp_pts: theirs,
+      starter: row.starter === 1,
+      min: row.seconds / 60,
+      ...Object.fromEntries(["pts", "reb", "oreb", "dreb", "ast", "stl", "blk", "tov", "pf", "fgm", "fga", "fg3m", "fg3a", "ftm", "fta"].map((key) => [key, row[key]])),
+      plus_minus: row.plus_minus,
+    };
+  });
+  const totals = { gp: games.length, gs: games.filter((g) => g.starter).length };
+  for (const key of ["min", "pts", "reb", "oreb", "dreb", "ast", "stl", "blk", "tov", "pf", "fgm", "fga", "fg3m", "fg3a", "ftm", "fta"]) {
+    totals[key] = games.reduce((sum, g) => sum + g[key], 0);
+  }
+  res.json({
+    season,
+    through,
+    league_games: gamesThrough(season, through),
+    games,
+    totals,
+    zones: zonesThrough(season, through, playerId),
+    league: zonesThrough(season, through),
+  });
+});
 
 // Makes and attempts by shot zone, { "Mid-Range|Left Side(L)": { fgm, fga } },
 // from shot chart rows (one per shot) or LeagueAverages rows (totals, which
@@ -860,6 +962,33 @@ app.get("/api/teamhistory", async (req, res) => {
     })),
   });
 });
+
+// Every player who has played in the league, to find one by name: [{ id,
+// name, from, to (the years their first and last seasons started), team (the
+// abbreviation of their team now, if they're on one) }], by name. The list
+// changes with signings and trades, so it's refreshed daily.
+function playerDirectory() {
+  return commonAllPlayers({ season: currentSeason() }, { ttlMs: 24 * 60 * 60_000 });
+}
+
+app.get("/api/players", async (req, res) => {
+  const { CommonAllPlayers: rows = [] } = await playerDirectory();
+  res.json(rows
+    .filter((row) => row.GAMES_PLAYED_FLAG !== "N")
+    .map((row) => ({
+      id: row.PERSON_ID,
+      name: row.DISPLAY_FIRST_LAST,
+      from: Number(row.FROM_YEAR),
+      to: Number(row.TO_YEAR),
+      team: (row.ROSTERSTATUS === 1 && row.TEAM_ABBREVIATION) || null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name)));
+});
+
+// Caches the player list, for bin/load-fixtures.
+export async function cachePlayers() {
+  await playerDirectory();
+}
 
 // Caches everything a team's card asks for in a season. bin/load-fixtures
 // uses it to cache the fake teams under the same requests the routes make.

@@ -5,6 +5,7 @@ import { savePref } from "../lib/prefs.js";
 import { seasonSelect, teamSelect } from "./dom.js";
 import { calendar, currentDate, gameIdsByDate, jumpCalendar, loadBoxScore, loadGames } from "./games.js";
 import { loadPlayerZones, playerDialog, showPlayerCard } from "./playercard.js";
+import { directoryPlayer } from "./search.js";
 import { state } from "./state.js";
 import { showTeamCard, teamDialog } from "./teamcard.js";
 
@@ -130,11 +131,15 @@ function playersFromHash(params) {
 }
 
 // Opens, switches, or closes the card to match the hash, once its game is
-// on screen. A card that can't be opened, like a player who isn't in the
-// game, is dropped from the hash.
-function syncCard(params) {
+// on screen (or with no game, when the hash has none). A card that can't be
+// opened, like a player id no one has, is dropped from the hash.
+async function syncCard(params) {
   const [kind, id] = (params.get("card") ?? "").split(":");
-  const zones = Number(params.get("zones")) || null;
+  // A season, or "todate" for the season so far.
+  let zones = Number(params.get("zones")) || null;
+  if (params.get("zones") === "todate") {
+    zones = "todate";
+  }
   if (kind === "player" && id) {
     closeTeamCard();
     if (state.playerCard?.id === id) {
@@ -143,8 +148,12 @@ function syncCard(params) {
       }
       return;
     }
+    // A player who isn't in the game on screen, from the player list.
     if (!showPlayerCard(id, zones, "link")) {
-      closePlayerCard();
+      const listed = await directoryPlayer(id).catch(() => null);
+      if (!listed || !showPlayerCard(id, zones, "link", listed)) {
+        closePlayerCard();
+      }
     }
     // Loading the game rewrote the hash before the card opened.
     writeHash();
@@ -180,8 +189,9 @@ function viewKey(params) {
 // the card changed, as with Back from a card, the game stays as it is.
 export async function applyHash() {
   const params = new URLSearchParams(location.hash.slice(1));
-  if (state.currentGame && viewKey(params) === viewKey(viewParams())) {
-    syncCard(params);
+  const sameView = viewKey(params) === viewKey(viewParams());
+  if (sameView && (state.currentGame || !params.get("date"))) {
+    await syncCard(params);
     return;
   }
 
@@ -200,12 +210,12 @@ export async function applyHash() {
     jumpCalendar(date);
     await loadBoxScore(date, periodFromLabel(params.get("q")), playersFromHash(params));
     if (state.currentGame) {
-      syncCard(params);
+      await syncCard(params);
     }
     return;
   }
 
-  closePlayerCard();
-  closeTeamCard();
+  // No game to show, but a card can still open on its own.
+  await syncCard(params);
   writeHash();
 }

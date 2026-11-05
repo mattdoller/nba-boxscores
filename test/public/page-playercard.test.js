@@ -8,9 +8,18 @@ describe("the player card", () => {
   let page;
   let player;
   let career;
+  let game;
 
   before(async () => {
-    page = await openPage({ hash: (fake) => gameHash(fake.byGame.values().next().value) });
+    // A game late in the season, with every game cached and indexed, so the
+    // player has a season so far.
+    page = await openPage({
+      hash: (fake) => {
+        game = [...fake.byGame.values()].at(-1);
+        return gameHash(game);
+      },
+      indexed: true,
+    });
     await page.waitFor(() => page.$(".player-link"), "the box score");
     await page.settle();
     // A veteran, so the card has seasons to compare and pick from.
@@ -39,7 +48,41 @@ describe("the player card", () => {
     await page.settle();
 
     const requested = page.requests.slice(requestsBefore).map((r) => r.split("?")[0]);
-    assert.deepEqual(requested.sort(), ["/api/league", "/api/player", "/api/playerzones"]);
+    assert.deepEqual(requested.sort(), ["/api/league", "/api/player", "/api/playerseason", "/api/playerzones"]);
+  });
+
+  it("shows the season so far, through the game on screen", async () => {
+    const season = await page.api(`/api/playerseason?player_id=${player.dataset.player}&season=2025&through=${game.date}`);
+    assert.ok(season.games.length > 1);
+
+    assert.match(page.$(".season-so-far h3").textContent, /^2025–26 through /);
+    const gp = page.$$(".season-averages div").find((d) => d.querySelector("dt").textContent === "GP");
+    assert.equal(Number(gp.querySelector("dd").textContent), season.games.length);
+    const rows = page.$$(".season-game-log tbody tr");
+    assert.deepEqual(rows.map((r) => r.dataset.gameDate), season.games.map((g) => g.date).reverse());
+    assert.equal(page.$(".season-game-log tr.current").dataset.gameDate, game.date);
+    assert.equal(page.$$(".season-trend .season-trend-dot").length, season.games.length);
+  });
+
+  it("switches the trend's stat, and remembers it", () => {
+    page.click('[data-season-trend="reb"]');
+
+    assert.equal(page.$('[data-season-trend="reb"]').getAttribute("aria-pressed"), "true");
+    assert.equal(page.pref("seasonTrend"), "reb");
+    page.click('[data-season-trend="pts"]');
+  });
+
+  it("shows the season so far's zones", async () => {
+    const season = await page.api(`/api/playerseason?player_id=${player.dataset.player}&season=2025&through=${game.date}`);
+    page.change("#cardZoneSeason", "todate");
+
+    assert.equal(page.hash().get("zones"), "todate");
+    const shots = Object.values(season.zones).reduce((sum, z) => sum + z.fga, 0);
+    assert.match(page.$("#playerDialog .legend").textContent, new RegExp(`${shots} shots`));
+
+    // Back to the season of the game on screen, for the tests that follow.
+    page.change("#cardZoneSeason", "2025");
+    await page.settle();
   });
 
   it("lists every season, then the career", () => {
@@ -51,7 +94,8 @@ describe("the player card", () => {
     const shaded = page.$$("#playerDialog .career td[style]");
     assert.ok(shaded.length > 0);
     assert.ok(shaded.every((td) => /color-mix/.test(td.getAttribute("style")) && td.title), "each shaded cell says why");
-    assert.match(page.$("#playerDialog .hint").textContent, /red above average/);
+    const careerHint = page.$$("#playerDialog .hint").find((p) => /regular season/.test(p.textContent));
+    assert.match(careerHint.textContent, /red above average/);
   });
 
   it("turns the shading off, and remembers it", () => {
@@ -158,6 +202,18 @@ describe("the player card", () => {
     page.click(sortButton());
     assert.deepEqual(shot(), [...shot()].sort((a, b) => a - b));
     assert.ok(values().slice(shot().length).every((v) => v === "–"));
+  });
+
+  it("opens a game from the season's log, with the card still over it", async () => {
+    const row = page.$$(".season-game-log tbody tr").find((r) => !r.classList.contains("current"));
+    page.click(row.cells[1]);
+
+    await page.waitFor(() => page.hash().get("date") === row.dataset.gameDate && page.$(".season-game-log tr.current"), "the other game and its card");
+    await page.settle();
+    assert.equal(page.hash().get("card"), `player:${player.dataset.player}`);
+    assert.equal(dialog().open, true);
+    assert.equal(page.$(".season-game-log tr.current").dataset.gameDate, row.dataset.gameDate);
+    assert.match(page.$(".season-so-far h3").textContent, /through/);
   });
 
   it("closes from its close button", () => {

@@ -118,6 +118,7 @@ const {
   pruneCache,
   seasonCacheStats,
 } = await import("../nba-api/cache.js");
+const { clearIndex, indexStats } = await import("../season-index.js");
 
 function formatBytes(bytes) {
   const units = ["B", "KB", "MB", "GB"];
@@ -188,6 +189,17 @@ function showStats() {
   for (const row of table) {
     console.log(line(row));
   }
+
+  // The season index lives beside the responses (see season-index.js).
+  const index = indexStats();
+  if (index.length === 0) {
+    console.log("\nSeason index: empty (bin/index fills it from the cache).");
+    return;
+  }
+  console.log("\nSeason index:");
+  for (const row of index) {
+    console.log(`  ${seasonString(row.season)}  ${plural(row.games, "game").padStart(11)}  ${plural(row.player_games, "player game").padStart(19)}  ${plural(row.shots, "shot").padStart(13)}`);
+  }
 }
 
 async function confirm(question) {
@@ -223,6 +235,7 @@ if (args.prune) {
     process.exit(0);
   }
 
+  clearIndex(season);
   const removed = clearSeason(season);
   console.log(`Removed ${plural(removed, "response")} for ${label}. Cache is ${formatBytes(sizeOnDisk())} on disk.`);
 } else if (args.clear) {
@@ -243,6 +256,10 @@ if (args.prune) {
     process.exit(0);
   }
 
+  // Without the responses, the index would be out of step with the cache.
+  if (!args.endpoint) {
+    clearIndex();
+  }
   const removed = clearCache(args.endpoint);
   console.log(`Removed ${plural(removed, "response")}. Cache is ${formatBytes(sizeOnDisk())} on disk.`);
 } else {

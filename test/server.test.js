@@ -14,6 +14,7 @@ import {
   withRunningScore,
 } from "../server.js";
 import { markFixtures } from "../nba-api/cache.js";
+import { indexGame } from "../season-index.js";
 import { setOffline } from "../nba-api/http.js";
 import { teamGameLog } from "../nba-api/index.js";
 import { teamColors } from "../team-colors.js";
@@ -744,6 +745,69 @@ describe("API", () => {
       const celtics = body.teams.find((row) => row.team_id === CELTICS_ID);
       assert.deepEqual([celtics.gp, celtics.w, celtics.l, celtics.pts, celtics.opp_pts, celtics.ast], [2, 1, 1, 205, 202, 50]);
       assert.equal(body.teams.length, 2);
+    });
+  });
+
+  describe("GET /api/players", () => {
+    it("lists everyone who has played, by name, with their team now", async (t) => {
+      const player = (id, name, status, from, to, team, played = "Y") => ({
+        PERSON_ID: id, DISPLAY_FIRST_LAST: name, ROSTERSTATUS: status, FROM_YEAR: from, TO_YEAR: to, TEAM_ABBREVIATION: team, GAMES_PLAYED_FLAG: played,
+      });
+      const calls = stubStatsApi(t, {
+        commonallplayers: resultSets({
+          CommonAllPlayers: [
+            player(893, "Michael Jordan", 0, "1984", "2002", ""),
+            player(2544, "LeBron James", 1, "2003", "2026", "LAL"),
+            player(9, "Never Played", 1, "2026", "2026", "BOS", "N"),
+          ],
+        }),
+      });
+
+      const { status, body } = await get("/api/players");
+
+      assert.equal(status, 200);
+      assert.equal(calls[0].params.IsOnlyCurrentSeason, "0");
+      assert.deepEqual(body, [
+        { id: 2544, name: "LeBron James", from: 2003, to: 2026, team: "LAL" },
+        { id: 893, name: "Michael Jordan", from: 1984, to: 2002, team: null },
+      ]);
+    });
+  });
+
+  describe("GET /api/playerseason", () => {
+    const players = (pts) => [{ personId: 77, teamId: CELTICS_ID, minutes: "30:00", points: pts, position: "G", fieldGoalsMade: 4, fieldGoalsAttempted: 9, plusMinusPoints: 5 }];
+    const teams = (home, away) => [
+      { teamId: CELTICS_ID, homeTeamId: CELTICS_ID, awayTeamId: LAKERS_ID, points: home },
+      { teamId: LAKERS_ID, homeTeamId: CELTICS_ID, awayTeamId: LAKERS_ID, points: away },
+    ];
+
+    before(() => {
+      indexGame({ gameId: "0029800001", season: 1998, date: "1999-02-05", players: players(20), teams: teams(101, 99), shots: [
+        { player_id: 77, team_id: CELTICS_ID, zone: "Restricted Area|Center(C)", made: true },
+      ] });
+      indexGame({ gameId: "0029800002", season: 1998, date: "1999-02-07", players: players(30), teams: teams(90, 104), shots: [] });
+    });
+
+    it("rejects a bad date", async () => {
+      assert.equal((await get("/api/playerseason?player_id=77&season=1998&through=yesterday")).status, 400);
+    });
+
+    it("lists the player's games through a date, with totals and zones", async () => {
+      const { status, body } = await get("/api/playerseason?player_id=77&season=1998&through=1999-02-05");
+
+      assert.equal(status, 200);
+      assert.equal(body.league_games, 1);
+      assert.deepEqual(body.games.map((g) => [g.date, g.opponent, g.home, g.result, g.team_pts, g.opp_pts, g.pts, g.min]),
+        [["1999-02-05", "LAL", true, "W", 101, 99, 20, 30]]);
+      assert.deepEqual([body.totals.gp, body.totals.gs, body.totals.pts, body.totals.fga], [1, 1, 20, 9]);
+      assert.deepEqual(body.zones, { "Restricted Area|Center(C)": { fgm: 1, fga: 1 } });
+    });
+
+    it("covers the whole season without a date", async () => {
+      const { body } = await get("/api/playerseason?player_id=77&season=1998");
+
+      assert.deepEqual(body.games.map((g) => g.result), ["W", "L"]);
+      assert.equal(body.totals.pts, 50);
     });
   });
 

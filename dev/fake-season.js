@@ -1023,6 +1023,33 @@ function fakeHistories(season, teams, leagueLog, tools) {
   return new Map([...rows].map(([teamId, teamRows]) => [teamId, { resultSets: [resultSet("TeamStats", TEAM_HISTORY_HEADERS, teamRows)] }]));
 }
 
+const DIRECTORY_HEADERS = [
+  "PERSON_ID", "DISPLAY_LAST_COMMA_FIRST", "DISPLAY_FIRST_LAST", "ROSTERSTATUS", "FROM_YEAR", "TO_YEAR",
+  "TEAM_ID", "TEAM_ABBREVIATION", "GAMES_PLAYED_FLAG",
+];
+
+// Every fake player (commonallplayers), all on a roster this season, with
+// their careers' first seasons.
+function fakeDirectory(teams, rosters, careers, season) {
+  const players = teams.flatMap((team) => rosters.get(team.id).map((player) => {
+    const rows = careers.get(player.id)?.career.resultSets.find((set) => set.name === "SeasonTotalsRegularSeason")?.rowSet ?? [];
+    const seasons = rows.map((row) => Number(String(row[CAREER_SEASON_HEADERS.indexOf("SEASON_ID")]).slice(0, 4)));
+    seasons.push(season);
+    return {
+      PERSON_ID: player.id,
+      DISPLAY_LAST_COMMA_FIRST: `${player.last}, ${player.first}`,
+      DISPLAY_FIRST_LAST: `${player.first} ${player.last}`,
+      ROSTERSTATUS: 1,
+      FROM_YEAR: String(Math.min(...seasons)),
+      TO_YEAR: String(season),
+      TEAM_ID: team.id,
+      TEAM_ABBREVIATION: team.abbreviation,
+      GAMES_PLAYED_FLAG: "Y",
+    };
+  }));
+  return { resultSets: [resultSet("CommonAllPlayers", DIRECTORY_HEADERS, players)] };
+}
+
 // A season of fake games: `gamesPerTeam` for every team, from opening night
 // of `season` (the year it starts). Returns the stats.nba.com responses by
 // endpoint: game logs by team id, the league's game log, each game's
@@ -1234,5 +1261,6 @@ export function fakeSeason({ season, gamesPerTeam = 10, seed = 1 }) {
   // Last, so the rest of the season comes out the same as it did before
   // teams had histories.
   responses.teamHistories = fakeHistories(season, teams, leagueLog, tools);
+  responses.allPlayers = fakeDirectory(teams, rosters, responses.players, season);
   return responses;
 }

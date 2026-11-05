@@ -202,7 +202,8 @@ body {
   margin-bottom: 20px;
 }
 
-.field > span {
+.field > span,
+.player-search > label {
   display: block;
   font-size: 13px;
   font-weight: 600;
@@ -212,7 +213,8 @@ body {
   letter-spacing: 0.04em;
 }
 
-select {
+select,
+.player-search input {
   width: 100%;
   padding: 8px 10px;
   font-size: 15px;
@@ -220,6 +222,59 @@ select {
   border-radius: 6px;
   background: var(--panel);
   color: var(--text);
+}
+
+/* Finding a player: matches drop down under the box, over the controls
+   below it. */
+.player-search {
+  position: relative;
+}
+
+.player-search input {
+  font: inherit;
+  font-size: 15px;
+}
+
+.player-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+}
+
+.player-results[hidden] {
+  display: none;
+}
+
+.player-results li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.player-results li[aria-selected="true"] {
+  background: var(--hover);
+}
+
+.player-results .result-about,
+.player-results .result-message {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.player-results .result-message {
+  cursor: default;
 }
 
 .hint {
@@ -2236,4 +2291,97 @@ table tbody tr:hover > .col-hover {
 
 .big-plays thead th {
   padding: 7px 10px;
+}
+
+/* The player card's season so far: averages in a row, the trend, and the
+   game log, which scrolls on its own like the team card's. */
+.season-so-far h3 {
+  margin: 0;
+}
+
+.season-averages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 10px 0;
+}
+
+.season-averages div {
+  display: grid;
+}
+
+.season-averages dt {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.season-averages dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.season-trend {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 10px;
+}
+
+.season-trend-axis {
+  stroke: var(--border);
+}
+
+.season-trend-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.season-trend-rolling {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2.5;
+  opacity: 0.5;
+}
+
+.season-trend-dot {
+  fill: var(--accent);
+}
+
+.season-trend-current {
+  fill: var(--zone-hot);
+  stroke: var(--panel);
+  stroke-width: 1.5;
+}
+
+.season-trend-tick,
+.season-trend-end {
+  font-size: 10px;
+  fill: var(--muted);
+  text-anchor: end;
+}
+
+.season-trend-end:not(.end) {
+  text-anchor: start;
+}
+
+.season-games {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.season-game-log tbody tr {
+  cursor: pointer;
+}
+
+.season-game-log th:first-child,
+.season-game-log .text {
+  text-align: left;
+}
+
+.season-game-log tbody tr.current > * {
+  background: var(--hover-cross);
+  font-weight: 600;
 }

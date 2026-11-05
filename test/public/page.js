@@ -32,6 +32,8 @@ function statsApi(fake, url) {
     if (params.get("SeasonType") === SeasonType.regular && params.get("Season") === seasonString(SEASON)) {
       body = fake.teamgamelog.get(Number(params.get("TeamID")));
     }
+  } else if (endpoint === "commonallplayers") {
+    body = fake.allPlayers;
   } else if (endpoint === "teamyearbyyearstats") {
     body = fake.teamHistories.get(Number(params.get("TeamID")));
   } else if (endpoint === "leaguegamelog") {
@@ -159,9 +161,11 @@ export function gameHash(game) {
 // Opens the page and resolves once it has loaded and settled. `hash` is the
 // URL's hash, or a function of the fake season that returns one, e.g.
 // (fake) => gameHash(...). `storage` presets localStorage, like a returning
-// visitor's saved settings; it can be a function of the fake season too. `fixtures` caches the season's game logs and
-// marks the cache as test data, as bin/load-fixtures does.
-export async function openPage({ hash = "", storage = {}, gamesPerTeam = 2, fixtures = false } = {}) {
+// visitor's saved settings; it can be a function of the fake season too.
+// `fixtures` caches the season's game logs and marks the cache as test
+// data, as bin/load-fixtures does. `indexed` caches every game first, which
+// adds them to the season index, so player cards have a season so far.
+export async function openPage({ hash = "", storage = {}, gamesPerTeam = 2, fixtures = false, indexed = false } = {}) {
   const fake = fakeSeason({ season: SEASON, gamesPerTeam, seed: 1 });
   if (typeof hash === "function") {
     hash = hash(fake);
@@ -209,6 +213,12 @@ export async function openPage({ hash = "", storage = {}, gamesPerTeam = 2, fixt
       await teamGameLog({ teamId: team.id, season: SEASON, seasonType: SeasonType.regular });
     }
     markFixtures();
+  }
+  if (indexed) {
+    const { cacheGame } = await import("../../server.js");
+    for (const gameId of fake.byGame.keys()) {
+      await cacheGame(gameId);
+    }
   }
 
   await import("../../public/app.js");

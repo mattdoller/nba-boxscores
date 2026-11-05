@@ -1,0 +1,120 @@
+#!/usr/bin/env node
+//
+// Indexes the games already in the cache, so player cards can show a
+// season up to any game. Games are indexed as they're cached too; this
+// catches up on games cached before the index existed.
+
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+const USAGE = `Usage: bin/index [options]
+
+Index the final regular-season games in the cache: every player's line
+and every shot, for the player cards' season so far. Only reads the
+cache; never asks stats.nba.com for anything. Games already indexed are
+skipped, so it's safe to stop and rerun.
+
+Options:
+  -s, --season YEAR      Only index this season, by the year it starts
+  -r, --rebuild          Empty the index (or the season's part of it) and
+                         index everything again
+  -c, --cache-db PATH    Cache file to index (default: NBA_CACHE_DB from
+                         .env, or data/nba-cache.sqlite)
+  -h, --help             Show this help and exit
+
+Examples:
+  bin/index
+  bin/index --season 2025 --rebuild
+  bin/index --cache-db data/fixtures.sqlite
+`;
+
+function fail(message) {
+  console.error(`bin/index: ${message}`);
+  console.error("Run 'bin/index --help' for usage.");
+  process.exit(1);
+}
+
+let args;
+try {
+  ({ values: args } = parseArgs({
+    options: {
+      season: { type: "string", short: "s" },
+      rebuild: { type: "boolean", short: "r" },
+      "cache-db": { type: "string", short: "c" },
+      help: { type: "boolean", short: "h" },
+    },
+  }));
+} catch (err) {
+  fail(err.message);
+}
+
+if (args.help) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+
+let season = null;
+if (args.season != null) {
+  season = Number(args.season);
+  if (!/^\d{4}$/.test(args.season)) {
+    fail(`season must be a start year like 2025, got '${args.season}'`);
+  }
+}
+
+// A --cache-db path is relative to where the command is run; the default is
+// relative to the project root and may be set in .env. Both have to be in
+// place before the cache module opens the database.
+const cwd = process.cwd();
+process.chdir(dirname(dirname(fileURLToPath(import.meta.url))));
+if (existsSync(".env")) {
+  process.loadEnvFile(".env");
+}
+if (args["cache-db"]) {
+  const { resolve } = await import("node:path");
+  const path = resolve(cwd, args["cache-db"]);
+  if (!existsSync(path)) {
+    fail(`${args["cache-db"]} doesn't exist`);
+  }
+  process.env.NBA_CACHE_DB = path;
+}
+
+const { setOffline, seasonFromGameId } = await import("../nba-api/index.js");
+const { cachedGameIds } = await import("../nba-api/cache.js");
+const { clearIndex, indexStats, isIndexed } = await import("../season-index.js");
+const { indexCachedGame } = await import("../server.js");
+
+// Everything comes from the cache; a game missing a response is skipped
+// rather than fetched.
+setOffline("Not in the cache");
+
+if (args.rebuild) {
+  clearIndex(season);
+}
+
+let indexed = 0;
+let skipped = 0;
+let incomplete = 0;
+const ids = cachedGameIds().filter((id) => season == null || seasonFromGameId(id) === season);
+for (const gameId of ids) {
+  if (isIndexed(gameId)) {
+    skipped++;
+    continue;
+  }
+  try {
+    if (await indexCachedGame(gameId)) {
+      indexed++;
+    } else {
+      skipped++;
+    }
+  } catch {
+    // Its summary or shot chart isn't cached.
+    incomplete++;
+  }
+}
+
+console.log(`Indexed ${indexed} games; ${skipped} already indexed or not final regular-season games; ${incomplete} missing a cached response.`);
+for (const row of indexStats().filter((r) => season == null || r.season === season)) {
+  console.log(`  ${row.season}: ${row.games} games, ${row.player_games} player games, ${row.shots} shots`);
+}

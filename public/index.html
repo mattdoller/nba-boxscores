@@ -53,6 +53,13 @@
     </div>
 
     <div id="panelBody" class="panel-body">
+      <div class="field player-search">
+        <label for="playerSearch">Player</label>
+        <input id="playerSearch" type="search" placeholder="Find a player…" autocomplete="off" spellcheck="false"
+          role="combobox" aria-expanded="false" aria-controls="playerResults" aria-autocomplete="list">
+        <ul id="playerResults" class="player-results" role="listbox" aria-label="Players" hidden></ul>
+      </div>
+
       <label class="field">
         <span>Team</span>
         <select id="teamSelect" disabled>

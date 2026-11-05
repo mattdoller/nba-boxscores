@@ -97,7 +97,7 @@ if (args.reset) {
 process.env.NBA_CACHE_DB = dbPath;
 
 const { SeasonType, getTeams, seasonString, teamGameLog } = await import("../nba-api/index.js");
-const { cacheGame, cachePlayer, cacheTeam } = await import("../server.js");
+const { cacheGame, cachePlayer, cachePlayers, cacheTeam } = await import("../server.js");
 const { currentSeason } = await import("../public/lib/format.js");
 const { fakeSeason } = await import("../dev/fake-season.js");
 const { markFixtures } = await import("../nba-api/cache.js");
@@ -124,6 +124,8 @@ globalThis.fetch = async (input) => {
     if (params.get("SeasonType") === SeasonType.regular) {
       body = fake.teamgamelog.get(Number(params.get("TeamID")));
     }
+  } else if (endpoint === "commonallplayers") {
+    body = fake.allPlayers;
   } else if (endpoint === "teamyearbyyearstats") {
     body = fake.teamHistories.get(Number(params.get("TeamID")));
   } else if (endpoint === "leaguegamelog") {
@@ -162,6 +164,7 @@ for (const playerId of fake.players.keys()) {
 for (const team of getTeams()) {
   await cacheTeam(team.id, season);
 }
+await cachePlayers();
 // The app shows a notice that the data is made up when the cache says so.
 markFixtures();
 

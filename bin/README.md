@@ -10,6 +10,7 @@ Scripts for setting up, running, checking, and filling the app's data.
 | [`lint`](#lint) | Check code style and likely mistakes |
 | [`cache`](#cache) | See or clean up the response cache |
 | [`backfill`](#backfill) | Download a whole real season into the cache |
+| [`index`](#index) | Index the cached games for the player cards' season so far |
 | [`load-fixtures`](#load-fixtures) | Make a fake season to try the app on |
 
 All of them:
@@ -194,6 +195,37 @@ nohup bin/backfill > backfill.log 2>&1 &
 tail -f backfill.log
 ```
 
+## index
+
+```sh
+bin/index
+bin/index --season 2025 --rebuild
+bin/index --cache-db data/fixtures.sqlite
+```
+
+| Option | What it does |
+| --- | --- |
+| `-s`, `--season YEAR` | Only index this season, by the year it starts |
+| `-r`, `--rebuild` | Empty the index (or the season's part of it) and index everything again |
+| `-c`, `--cache-db PATH` | Cache file to index (default: `NBA_CACHE_DB` from `.env`, or `data/nba-cache.sqlite`) |
+
+Adds the cache's final regular-season games to the season index, the
+tables beside the cached responses that the player cards' season so far
+reads (see `season-index.js`): one row per game, per player per game,
+and per shot.
+
+- **Games join the index on their own** when they're cached: by
+  `bin/backfill`, `bin/load-fixtures`, or opening a final game in the app.
+  This catches up on games cached before the index existed.
+- **It only reads the cache.** A game missing a response is skipped, never
+  fetched.
+- **It's quick:** a whole backfilled season takes about half a minute and
+  adds about 30 MB.
+- **It can be stopped and rerun.** Games already indexed are skipped.
+
+`bin/cache --stats` shows what's in the index; `--clear` and
+`--prune-season` empty it along with the responses.
+
 ## load-fixtures
 
 ```sh
@@ -225,7 +257,9 @@ shot chart for each. The league's team stats for those seasons, which the
 card shades stats against, come from the simulated games. So do the team
 cards' league game log and each team's season of shots. Each team's
 history has made-up records and playoffs for the earlier seasons, and its
-record so far in the simulated one.
+record so far in the simulated one. Every fake player is in the player
+list the search box finds them in, and every game is in the season index,
+so player cards have a season so far.
 
 The default 10 games per team (150 games) takes about half a minute and
 about 65 MB, careers included.

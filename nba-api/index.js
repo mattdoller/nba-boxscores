@@ -14,3 +14,4 @@ export { playerCareerStats } from "./endpoints/playercareerstats.js";
 export { leagueDashTeamStats } from "./endpoints/leaguedashteamstats.js";
 export { leagueGameLog } from "./endpoints/leaguegamelog.js";
 export { teamYearByYearStats } from "./endpoints/teamyearbyyearstats.js";
+export { commonAllPlayers } from "./endpoints/commonallplayers.js";

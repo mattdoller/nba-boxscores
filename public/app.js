@@ -18,6 +18,8 @@ import { openPlayerCard, playerCardChange, playerCardClick, playerDialog } from 
 import { showShotTooltip, toggleCourtTrend } from "./ui/shotchart.js";
 import { state } from "./ui/state.js";
 import { openTeamCard, teamCardClick, teamCardClosed, teamDialog } from "./ui/teamcard.js";
+// Sets up the player search box.
+import "./ui/search.js";
 // Sets up the day/night and control panel switches.
 import "./ui/theme.js";
 import { hideTooltip } from "./ui/tooltip.js";

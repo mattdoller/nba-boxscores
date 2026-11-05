@@ -6,9 +6,11 @@ import { getJson } from "./api.js";
 import { currentStats } from "./boxscore.js";
 import { applyCardSorts, cardSortClick, sortHeader } from "./cardsort.js";
 import { percent, seasonLabel, shadeAttrs, zonesBody } from "./cardzones.js";
-import { seasonSelect } from "./dom.js";
-import { writeHash } from "./hash.js";
+import { seasonSelect, teamSelect } from "./dom.js";
+import { currentDate } from "./games.js";
+import { openView, writeHash } from "./hash.js";
 import { teamById } from "./playback.js";
+import { seasonSoFar, seasonTrendClick } from "./seasonsofar.js";
 import { state } from "./state.js";
 import { hideTooltip } from "./tooltip.js";
 
@@ -295,25 +297,33 @@ function zoneSeasons() {
 
 function playerZonesSection() {
   const { career, error } = state.playerCard;
-  if (error) {
+  const soFar = state.playerCard.soFar;
+  const hasSoFar = soFar?.games?.length > 0;
+  // Without a career there are no seasons to pick, but the season so far
+  // still has its zones.
+  if (error && !hasSoFar) {
     return "";
   }
   const seasons = zoneSeasons();
-  if (career && seasons.length === 0) {
+  if (career && seasons.length === 0 && !hasSoFar) {
     return '<p class="hint">No shot data: it starts with the 1996–97 season.</p>';
   }
 
   let options = "<option>Loading…</option>";
-  if (seasons.length > 0) {
+  if (seasons.length > 0 || hasSoFar) {
     options = seasons
       .map((season) => `<option value="${season}"${season === state.playerCard.season ? " selected" : ""}>${seasonLabel(season)}</option>`)
       .join("");
+  }
+  // The season so far's zones, from the cached games, first.
+  if (hasSoFar) {
+    options = `<option value="todate"${state.playerCard.season === "todate" ? " selected" : ""}>${seasonLabel(soFar.season)} so far</option>${options}`;
   }
   const data = state.playerCard.zones.get(state.playerCard.season);
   return `
     <div class="card-zones-head">
       <h3>Hot/cold zones</h3>
-      <label>Season <select id="cardZoneSeason"${seasons.length === 0 ? " disabled" : ""}>${options}</select></label>
+      <label>Season <select id="cardZoneSeason"${seasons.length === 0 && !hasSoFar ? " disabled" : ""}>${options}</select></label>
     </div>
     ${zonesBody(data, `${state.playerCard.name}'s shooting by zone`, "player")}`;
 }
@@ -323,9 +333,9 @@ function renderPlayerCard() {
     return;
   }
 
-  const { name, team, position } = state.playerCard;
+  const { name, team, position, years } = state.playerCard;
   playerDialog.classList.toggle("expanded", cardExpanded);
-  const about = [team?.full_name, position].filter(Boolean).join(" · ");
+  const about = [team?.full_name, position, years].filter(Boolean).join(" · ");
   playerDialog.innerHTML = `
     <div class="player-card">
       <header class="player-card-header">
@@ -335,6 +345,7 @@ function renderPlayerCard() {
         </div>
         <button type="button" class="player-card-close" aria-label="Close">×</button>
       </header>
+      ${seasonSoFar(state.playerCard.soFar, state.playerCard.inGame)}
       <section>
         <div class="card-section-head">
           <h3>Career</h3>
@@ -352,6 +363,9 @@ export async function loadPlayerZones(season) {
   card.season = season;
   // The season shown is in the URL, so a link opens the same court.
   writeHash();
+  if (season === "todate") {
+    card.zones.set(season, { zones: card.soFar.zones, league: card.soFar.league });
+  }
   if (card.zones.has(season)) {
     renderPlayerCard();
     return;
@@ -405,26 +419,47 @@ export function openPlayerCard(event) {
   writeHash({ push: true });
 }
 
-// Opens a player's card, by id: from the box score or from a link (see
+// A team from the control panel's menu, by abbreviation, like the game's
+// teams: { id, abbreviation, full_name }. Null for no team.
+function teamByAbbreviation(abbreviation) {
+  const option = [...teamSelect.options].find((o) => o.dataset.abbr && o.dataset.abbr === abbreviation);
+  if (!option) {
+    return null;
+  }
+  return { id: Number(option.value), abbreviation, full_name: option.textContent };
+}
+
+// Opens a player's card, by id: from the box score, a search, or a link (see
 // syncCard in hash.js), which can name the season of zones to show. The
-// card gets the player's name and team from the game's box score, so it
-// only opens for a player in the game on screen; returns false otherwise.
-export function showPlayerCard(id, zonesSeason, source) {
+// card gets the player's name and team from the game's box score, or for a
+// player not in the game on screen, from `listed`, their entry in the player
+// list (see search.js). Returns false when it has neither.
+export function showPlayerCard(id, zonesSeason, source, listed = null) {
   const row = currentStats.find((r) => String(r.player_id) === String(id));
-  if (!row) {
+  if (!row && !listed) {
     return false;
   }
 
+  // A listed player's years stand in for a position: "1984–2002".
+  let years = "";
+  if (listed) {
+    years = listed.from === listed.to ? String(listed.from) : `${listed.from}–${listed.to}`;
+  }
+  let about = { name: listed?.name, team: teamByAbbreviation(listed?.team), position: "", years };
+  if (row) {
+    about = { name: `${row.first_name} ${row.last_name}`, team: teamById(row.team_id), position: row.position, years: "" };
+  }
   const card = {
     id: String(id),
-    name: `${row.first_name} ${row.last_name}`,
-    team: teamById(row.team_id),
-    position: row.position,
+    ...about,
+    // Whether they're in the game on screen, so should have a season so far.
+    inGame: Boolean(row),
     career: null,
     error: null,
     season: null,
     zones: new Map(),
     league: new Map(),
+    soFar: null,
   };
   state.playerCard = card;
   track("player_card_open", { player_id: Number(card.id), player: card.name, source });
@@ -438,25 +473,49 @@ export function showPlayerCard(id, zonesSeason, source) {
 }
 
 async function loadPlayerCard(card, zonesSeason) {
-  try {
-    card.career = await getJson(`/api/player?player_id=${card.id}`);
-  } catch (err) {
-    card.error = err.message;
-  }
+  await Promise.all([
+    getJson(`/api/player?player_id=${card.id}`).then((career) => {
+      card.career = career;
+    }, (err) => {
+      card.error = err.message;
+    }),
+    loadSeasonSoFar(card),
+  ]);
   if (card !== state.playerCard) {
     return;
   }
   loadLeagueSeasons(card);
-  // Start with the zones for the season a link asked for, or else the
-  // season of the game on screen, if the player has them, or else their
-  // latest.
+  // Start with the zones for the season a link asked for (which can be the
+  // season so far), or else the season of the game on screen, if the player
+  // has them, or else their latest.
   const seasons = zoneSeasons();
+  if (card.soFar?.games?.length && (zonesSeason === "todate" || seasons.length === 0)) {
+    loadPlayerZones("todate");
+    return;
+  }
   if (seasons.length === 0) {
     renderPlayerCard();
     return;
   }
   const start = [zonesSeason, Number(seasonSelect.value)].find((season) => seasons.includes(season)) ?? seasons[0];
   loadPlayerZones(start);
+}
+
+// The player's season up to the game on screen (or all of it, with no game
+// on screen), from the cached games.
+async function loadSeasonSoFar(card) {
+  let query = `player_id=${card.id}&season=${seasonSelect.value}`;
+  if (currentDate) {
+    query += `&through=${currentDate}`;
+  }
+  try {
+    card.soFar = await getJson(`/api/playerseason?${query}`);
+  } catch (err) {
+    card.soFar = err;
+  }
+  if (card === state.playerCard) {
+    renderPlayerCard();
+  }
 }
 
 export function playerCardClick(event) {
@@ -494,6 +553,19 @@ export function playerCardClick(event) {
     return;
   }
 
+  if (seasonTrendClick(event)) {
+    renderPlayerCard();
+    return;
+  }
+  // A game in the season's log opens it, with the card still open over it.
+  const game = event.target.closest(".season-game-log tr[data-game-date]");
+  if (game) {
+    const { id, soFar } = state.playerCard;
+    track("player_card_game", { player_id: Number(id), date: game.dataset.gameDate });
+    openView(`team=${game.dataset.team}&season=${soFar.season}&date=${game.dataset.gameDate}&card=player:${id}`);
+    return;
+  }
+
   const row = event.target.closest("tr[data-season]");
   if (row) {
     track("player_card_season", { player_id: Number(state.playerCard.id), season: Number(row.dataset.season), source: "career" });
@@ -503,7 +575,11 @@ export function playerCardClick(event) {
 
 export function playerCardChange(event) {
   if (event.target.id === "cardZoneSeason") {
-    track("player_card_season", { player_id: Number(state.playerCard.id), season: Number(event.target.value), source: "menu" });
-    loadPlayerZones(Number(event.target.value));
+    let season = Number(event.target.value);
+    if (event.target.value === "todate") {
+      season = "todate";
+    }
+    track("player_card_season", { player_id: Number(state.playerCard.id), season, source: "menu" });
+    loadPlayerZones(season);
   }
 }
