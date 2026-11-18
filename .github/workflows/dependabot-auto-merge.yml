@@ -1,6 +1,10 @@
-# Queues Dependabot's patch and minor updates to merge once CI passes, so
-# they don't wait on a click. Major updates, which can change behavior, are
-# left for a person to review.
+---
+# Queues Dependabot's updates to merge once CI passes, so they don't wait on
+# a click. That covers patch and minor updates, and major updates to
+# development dependencies: CI runs the linters and test runners, so a major
+# that breaks one fails the check and doesn't merge. Major updates to runtime
+# dependencies, which change behavior on purpose in ways the tests may not
+# cover, are left for a person to review.
 #
 # GitHub does the merging (auto-merge), and only after the checks the main
 # branch's ruleset requires have passed, so this needs both:
@@ -24,7 +28,9 @@ jobs:
         uses: dependabot/fetch-metadata@v3
 
       - name: Merge when CI passes
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        if: >-
+          steps.metadata.outputs.update-type != 'version-update:semver-major' ||
+          steps.metadata.outputs.dependency-type == 'direct:development'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

@@ -1,4 +1,5 @@
-# Weekly pull requests to update the npm packages and the actions the
+---
+# Weekly pull requests to update the dependencies and the actions the
 # workflows use. CI checks each one before it's merged.
 version: 2
 updates:
@@ -6,6 +7,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Wait 3 days after a release before proposing it. Auto-merge means a
+    # hijacked release could reach main with no one looking, and those are
+    # usually caught and pulled within days. Security updates skip the wait.
+    cooldown:
+      default-days: 3
     # Patch and minor updates come together in one pull request; major ones
     # each get their own.
     groups:
@@ -16,3 +22,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Wait 3 days after a release before proposing it. Auto-merge means a
+    # hijacked release could reach main with no one looking, and those are
+    # usually caught and pulled within days. Security updates skip the wait.
+    cooldown:
+      default-days: 3
