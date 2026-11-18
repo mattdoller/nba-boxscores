@@ -1,0 +1,11 @@
+# yamllint configuration, read by .githooks/pre-push.d/40-yamllint.sh.
+# Tuned for GitHub workflows: their files start without "---", their "on:"
+# key reads as a truthy value, and their run: lines are often long.
+extends: default
+
+rules:
+  document-start: disable
+  truthy:
+    check-keys: false
+  line-length:
+    max: 120

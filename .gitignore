@@ -25,3 +25,63 @@ Thumbs.db
 *.swp
 *~
 .idea/
+
+# Secrets / local environment
+.envrc
+!.envrc.example
+*.pem
+*.key
+*.crt
+*.p12
+id_rsa*
+id_ed25519*
+wifi.conf
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+!*.tfvars.example
+# Google Cloud (.env.yaml for --env-vars-file is covered by .env.* above)
+application_default_credentials.json
+credentials.json
+client_secret*.json
+service-account*.json
+*-service-account.json
+*-sa-key.json
+gha-creds-*.json
+.runtimeconfig.json
+.boto
+.gcloud/
+.config/gcloud/
+# Ansible
+*.retry
+.vault_pass
+vault_pass
+# Lambda / Node
+*.zip
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+# Ruby
+.bundle/
+vendor/bundle/
+# Images and archives
+*.img
+*.raw
+*.qcow2
+*.gz
+# Editor / OS
+*.swo
+.vscode/
+.claude/
