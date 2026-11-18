@@ -35,7 +35,9 @@ jobs:
         if: always()
         run: node dev/coverage-summary.js < test-output.txt >> "$GITHUB_STEP_SUMMARY"
 
-      # High and critical advisories only: the moderate ones today are in
-      # ESLint's own dependencies, which never reach the browser or server.
+      # High and critical advisories in the packages the app runs with.
+      # Development tools (linters, test runners) never ship, and an
+      # advisory in one can have no fix for weeks, which would block every
+      # build and deploy. Dependabot alerts still report those.
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
