@@ -1,4 +1,5 @@
-# GitHub's CodeQL security scan of the JavaScript: on pushes and pull
+---
+# GitHub's CodeQL security scan of the code: on pushes and pull
 # requests to main, and weekly, since new checks are added over time.
 # Findings show under the repository's Security tab.
 #
@@ -22,12 +23,16 @@ jobs:
     permissions:
       security-events: write
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript]
     steps:
       - uses: actions/checkout@v7
 
       - uses: github/codeql-action/init@v4
         with:
-          languages: javascript-typescript
+          languages: ${{ matrix.language }}
           build-mode: none
 
       - uses: github/codeql-action/analyze@v4

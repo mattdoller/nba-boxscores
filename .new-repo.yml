@@ -1,0 +1,8 @@
+---
+# Written by new-repo, which set this repository up. It keeps the answers
+# that the generated .github/ files depend on, so re-running new-repo,
+# or new-repo --update, can regenerate them without asking again.
+#
+# stacks: any of node, ruby and terraform. new-repo offers to change
+# them on each run; edit this file to change them yourself.
+stacks: [node]
