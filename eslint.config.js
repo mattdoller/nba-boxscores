@@ -36,8 +36,10 @@ export default [
   },
   // The server, its API client, scripts, and tests run on Node. The bin/
   // scripts have no .js extension, so they're named here to be linted.
+  // The runners in bin/lint.d/, bin/test.d/, and bin/server.d/ are
+  // matched by extension, since each is in whatever language suits it.
   {
-    files: ["*.js", "nba-api/**/*.js", "dev/**/*.js", "test/**/*.js", "bin/cache", "bin/backfill", "bin/index", "bin/load-fixtures", "bin/readme-screenshots"],
+    files: ["*.js", "nba-api/**/*.js", "dev/**/*.js", "test/**/*.js", "bin/*.d/*.{js,mjs}", "bin/cache", "bin/backfill", "bin/index", "bin/load-fixtures", "bin/readme-screenshots"],
     languageOptions: { globals: globals.node },
   },
   // The front end runs in the browser. events.js is a classic script that

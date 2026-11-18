@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Runs every check in pre-commit.d/ in order. Enable per clone with:
+#   git config core.hooksPath .githooks
+set -uo pipefail
+
+hooks_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "${hooks_dir}/lib.sh"
+
+run_checks "${hooks_dir}/pre-commit.d" "$@"

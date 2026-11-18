@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Runs every check in pre-push.d/ in order. Enable per clone with:
+#   git config core.hooksPath .githooks
+#
+# git pipes one "<local ref> <local sha> <remote ref> <remote sha>" line per
+# ref on stdin; it is captured once here and handed to each check as HOOK_STDIN.
+set -uo pipefail
+
+hooks_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "${hooks_dir}/lib.sh"
+
+HOOK_STDIN="$(cat)"
+export HOOK_STDIN
+
+run_checks "${hooks_dir}/pre-push.d" "$@"

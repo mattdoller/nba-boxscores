@@ -1,0 +1,2 @@
+# Copy to .envrc (gitignored), fill in real values, then: direnv allow
+export PERSONAL_EMAIL=you@example.com

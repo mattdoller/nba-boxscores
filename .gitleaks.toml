@@ -1,0 +1,19 @@
+# gitleaks configuration. Extends the built-in rules and allowlists the
+# placeholder values used in documentation and example configs.
+title = "repo"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation placeholders and example values"
+regexes = [
+  '''YOUR_[A-Z_]+''',
+  '''123456789012''',
+  '''[a-z]+@example\.com''',
+  '''users\.noreply\.github\.com''',
+]
+paths = [
+  '''cloud/\.terraform\.lock\.hcl''',
+  '''package-lock\.json''',
+]
